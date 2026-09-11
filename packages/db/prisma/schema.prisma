@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -12,4 +6,115 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum ActivityCategory {
+  DESIGN
+  RESEARCH
+  COMMUNICATION
+  DOCUMENTATION
+  DEVELOPMENT
+  OTHER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects        Project[]
+  activities      Activity[]
+  timesheets      Timesheet[]
+  privacySettings PrivacySettings?
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  activities       Activity[]
+  timesheetEntries TimesheetEntry[]
+
+  @@index([userId])
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+  application String
+  windowTitle String?
+  startedAt   DateTime
+  endedAt     DateTime
+  duration    Int
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  classification ActivityClassification?
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([startedAt])
+}
+
+model ActivityClassification {
+  id         String           @id @default(uuid())
+  category   ActivityCategory
+  confidence Float
+  reason     String?
+  createdAt  DateTime         @default(now())
+
+  activityId String   @unique
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+}
+
+model Timesheet {
+  id        String   @id @default(uuid())
+  date      DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  entries TimesheetEntry[]
+
+  @@index([userId, date])
+}
+
+model TimesheetEntry {
+  id          String           @id @default(uuid())
+  startTime   DateTime
+  endTime     DateTime
+  description String
+  category    ActivityCategory
+  confidence  Float?
+  approved    Boolean          @default(false)
+
+  timesheetId String
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([timesheetId])
+  @@index([projectId])
+}
+
+model PrivacySettings {
+  id              String   @id @default(uuid())
+  trackingEnabled Boolean  @default(false)
+  retentionDays   Int      @default(30)
+  updatedAt       DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
