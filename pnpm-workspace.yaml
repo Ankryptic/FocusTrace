@@ -3,4 +3,7 @@ packages:
   - "packages/*"
   - "services/*"
 allowBuilds:
+  '@prisma/client': false
+  '@prisma/engines': false
+  prisma: false
   unrs-resolver: true
