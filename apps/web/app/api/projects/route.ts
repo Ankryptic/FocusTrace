@@ -1,0 +1,76 @@
+import { db } from "@focus-trace/db";
+import { serializeUseCacheCacheStore } from "next/dist/server/resume-data-cache/cache-store";
+import { NextResponse } from "next/server";
+
+const TEST_USER_ID = "6d816c76-a738-46a7-8b14-81ce98387b5e";
+
+export async function GET() {
+    try {
+        const projects = await db.project.findMany({
+            where: {
+                userId: TEST_USER_ID,
+            },
+            orderBy: {
+                createdAt: "desc"
+            }
+        });
+
+        return NextResponse.json({
+            success: true,
+            projects,
+        })
+    } catch (error) {
+        console.error("Get Projects error: ", error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Could not fetch projects"
+            },
+            { status: 500 },
+        );
+    }
+}
+
+export async function POST(request: Request){
+    try {
+        const body = await request.json();
+
+        if(!body.name || typeof body.name !== "string"){
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Project name is required",
+                },
+                { status: 400 },
+            );
+        }
+
+        const project = await db.project.create({
+            data: {
+                name: body.name,
+                description: body.description ?? null,
+                userId: TEST_USER_ID,
+            },
+        });
+
+        return NextResponse.json(
+            {
+                success: true,
+                project,
+            },
+            { status: 201 },
+        ); 
+
+    } catch (error) {
+        console.error("Create Project error: ", error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Could not create project",
+            },
+            { status: 500 }
+        );
+    }
+}
