@@ -5,5 +5,7 @@ packages:
 allowBuilds:
   '@prisma/client': false
   '@prisma/engines': false
+  electron: false
+  esbuild: false
   prisma: false
   unrs-resolver: true
