@@ -7,5 +7,6 @@ allowBuilds:
   '@prisma/engines': false
   electron: false
   esbuild: false
+  get-windows: false
   prisma: false
   unrs-resolver: true
