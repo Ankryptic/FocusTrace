@@ -1,3 +1,4 @@
 {
-    "liveServer.settings.multiRootWorkspaceName": "FocusTrace"
+    "liveServer.settings.multiRootWorkspaceName": "FocusTrace",
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

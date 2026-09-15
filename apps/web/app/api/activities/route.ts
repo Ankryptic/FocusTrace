@@ -6,6 +6,9 @@ const TEST_USER_ID = "6d816c76-a738-46a7-8b14-81ce98387b5e";
 export async function GET() {
     try {
         const activities = await db.activity.findMany({
+            where: {
+                userId: TEST_USER_ID,
+            },
             orderBy: {
                 startedAt: "desc"
             }, 
@@ -92,7 +95,7 @@ export async function POST(req: Request){
                 endedAt,
                 duration,
                 userId: TEST_USER_ID,
-                projectId: body.projectId ?? null
+                projectId: body.projectId ?? null,
             },
             include: {
                 project: true,
