@@ -102,12 +102,59 @@ export async function POST(req: Request){
             },
         });
 
+        // ask ai service to classify
+        try {
+            const aiResponse = await fetch("http://127.0.0.1:8000/classify", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    application: activity.application,
+                    windowTitle: activity.windowTitle
+                }),
+            })
+
+            if(!aiResponse.ok){
+                throw new Error(`AI service returned ${aiResponse.status}`);
+            }
+
+            const aiResult = await aiResponse.json();
+            const classification = aiResult.classification;
+
+            // save classification in PostgreSQL
+            await db.activityClassification.create({
+                data: {
+                    activityId: activity.id,
+                    category: classification.category,
+                    confidence: classification.confidence,
+                    reason: classification.reason,
+                },
+            })
+
+            console.log("✓ Activity classified:", classification);
+        } catch (error) {
+            // Classification failure should NOT delete the actvity
+            console.log("AI classification failed: ", error);
+        }
+
+        // Return the activity
+        const savedActivity = await db.activity.findUnique({
+            where: {
+                id: activity.id,
+            },
+            include: {
+                project: true,
+                classification: true,
+            }
+        });
+
         return NextResponse.json(
             {
                 success: true,
-                activity,
+                activity: savedActivity
             },
-            { status: 201 }
+            { status: 201 },
         );
 
     } catch (error) {
