@@ -24,7 +24,7 @@ def classify_activity(
         return {
             "category": "DEVELOPMENT",
             "confidence": 0.95,
-            "reason": "The application or window appears related to software developent.",
+            "reason": "The application or window appears related to software development.",
         }
 
 
