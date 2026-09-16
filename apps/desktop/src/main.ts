@@ -49,19 +49,28 @@ function saveConfig(config: Record<string, unknown>) {
 }
 
 function saveDesktopToken(token: string) {
+  console.log(
+    "safeStorage encryption available:",
+    safeStorage.isEncryptionAvailable(),
+  );
+
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error(
-      "Secure storage is not available on this machine",
+      "Electron safeStorage encryption is not available",
     );
   }
 
   const encryptedToken = safeStorage.encryptString(token);
+
+  console.log("Token encrypted successfully.");
 
   const config = readConfig();
 
   config.desktopToken = encryptedToken.toString("base64");
 
   saveConfig(config);
+
+  console.log("Encrypted token saved successfully.");
 }
 
 function getDesktopToken(): string | null {
@@ -129,7 +138,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(
         __dirname,
-        "preload.js",
+        "preload.cjs",
       ),
       contextIsolation: true,
       nodeIntegration: false,
@@ -199,7 +208,10 @@ ipcMain.handle("desktop-token:save", async (_event, token: string) => {
 
     return {
       success: false,
-      error: "Could not securely save desktop token",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not securely save desktop token",
     };
   }
 });
@@ -243,9 +255,14 @@ ipcMain.handle("project:get", async () => {
 function start() {
   createWindow();
 
-  startActivityTracker(() => {
-    return getActiveProjectId();
-  });
+  startActivityTracker(
+    () => {
+      return getActiveProjectId();
+    },
+    () => {
+      return getDesktopToken();
+    },
+  );
 }
 
 app.whenReady().then(() => {

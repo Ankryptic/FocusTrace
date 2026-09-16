@@ -15,22 +15,29 @@ type Activity = {
   endedAt: Date;
 };
 
-async function isTrackingEnabled() {
+async function isTrackingEnabled(token: string) {
   try {
     const response = await fetch(
       "http://localhost:3000/api/settings/privacy",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
     );
 
     if (!response.ok) {
+      console.error(
+        "Privacy API returned:",
+        response.status,
+      );
+
       return false;
     }
 
     const data = await response.json();
 
-    return (
-      data.settings?.trackingEnabled ===
-      true
-    );
+    return data.settings?.trackingEnabled === true;
   } catch (error) {
     console.error(
       "Could not check tracking permission:",
@@ -43,6 +50,7 @@ async function isTrackingEnabled() {
 
 export function startActivityTracker(
   getProjectId: ProjectIdGetter,
+  getToken: () => string | null,
 ) {
   let currentActivity: Activity | null =
     null;
@@ -51,8 +59,14 @@ export function startActivityTracker(
 
   async function poll() {
     try {
-      const trackingEnabled =
-        await isTrackingEnabled();
+      const token = getToken();
+
+      if (!token) {
+        console.log("Desktop is not paired.");
+        return;
+      }
+
+      const trackingEnabled = await isTrackingEnabled(token);
 
       if (!trackingEnabled) {
         /*
@@ -68,6 +82,7 @@ export function startActivityTracker(
           await saveActivity(
             currentActivity,
             getProjectId(),
+            token,
           );
 
           currentActivity = null;
@@ -105,6 +120,7 @@ export function startActivityTracker(
         await saveActivity(
           currentActivity,
           getProjectId(),
+          token,
         );
       }
 
@@ -152,6 +168,7 @@ export function startActivityTracker(
 async function saveActivity(
   activity: Activity,
   projectId: string | null,
+  token: string,
 ) {
   try {
     /*
@@ -173,31 +190,29 @@ async function saveActivity(
       },
     );
 
-    const response =
-      await fetch(API_URL, {
-        method: "POST",
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
 
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
+      body: JSON.stringify({
+        application:
+          activity.application,
 
-        body: JSON.stringify({
-          application:
-            activity.application,
+        windowTitle:
+          activity.windowTitle,
 
-          windowTitle:
-            activity.windowTitle,
+        startedAt:
+          activity.startedAt.toISOString(),
 
-          startedAt:
-            activity.startedAt.toISOString(),
+        endedAt:
+          activity.endedAt.toISOString(),
 
-          endedAt:
-            activity.endedAt.toISOString(),
-
-          projectId,
-        }),
-      });
+        projectId,
+      }),
+    });
 
     const data =
       await response.json();

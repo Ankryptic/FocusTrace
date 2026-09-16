@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <title>FocusTrace</title>
 
@@ -136,6 +134,25 @@
     .loading {
       color: #64748b;
     }
+
+    .pair-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .pair-row input {
+      flex: 1;
+      padding: 10px;
+    }
+
+    .pair-row button {
+      padding: 10px 16px;
+    }
+
+    #pair-status {
+      margin-top: 10px;
+    }
   </style>
 </head>
 
@@ -154,11 +171,26 @@
     </header>
 
     <section class="card">
+      <h2>Desktop Pairing</h2>
 
-      <label
-        class="label"
-        for="project"
-      >
+      <p>
+        Paste the desktop token generated from your FocusTrace dashboard.
+      </p>
+
+      <div class="pair-row">
+        <input id="desktop-token" type="password" placeholder="Paste desktop token" />
+
+        <button id="pair-button">
+          Pair Desktop
+        </button>
+      </div>
+
+      <p id="pair-status"></p>
+    </section>
+
+    <section class="card">
+
+      <label class="label" for="project">
         Active Project
       </label>
 
@@ -176,19 +208,13 @@
         </span>
       </div>
 
-      <div
-        id="projectInfo"
-        class="project-info"
-      >
+      <div id="projectInfo" class="project-info">
         <div class="loading">
           Loading project...
         </div>
       </div>
 
-      <div
-        id="error"
-        class="error"
-      ></div>
+      <div id="error" class="error"></div>
 
     </section>
 
@@ -204,7 +230,67 @@
     const errorElement =
       document.getElementById("error");
 
+    const tokenInput = document.getElementById("desktop-token");
+    const pairButton = document.getElementById("pair-button");
+    const pairStatus = document.getElementById("pair-status");
+
+
     let projects = [];
+
+
+    async function checkPairingStatus() {
+      const result = await window.focusTrace.hasDesktopToken();
+
+      if (result.success) {
+        pairStatus.textContent = "Desktop is paired.";
+        tokenInput.style.display = "none";
+        pairButton.style.display = "none";
+      }
+    }
+
+    pairButton.addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+
+      if (!token) {
+        pairStatus.textContent = "Please enter a desktop token.";
+        return;
+      }
+
+      if (!token.startsWith("ftd_")) {
+        pairStatus.textContent = "Invalid FocusTrace desktop token.";
+        return;
+      }
+
+      pairButton.disabled = true;
+      pairStatus.textContent = "Pairing...";
+
+      try {
+        const result =
+          await window.focusTrace.saveDesktopToken(token);
+
+        if (!result.success) {
+          throw new Error(
+            result.error || "Could not save desktop token",
+          );
+        }
+
+        tokenInput.value = "";
+        tokenInput.style.display = "none";
+        pairButton.style.display = "none";
+
+        pairStatus.textContent =
+          "Desktop paired successfully.";
+      } catch (error) {
+        console.error("Pairing error:", error);
+
+        pairStatus.textContent =
+          "Could not save desktop token.";
+
+        pairButton.disabled = false;
+      }
+    });
+
+    checkPairingStatus();
 
     async function loadProjects() {
       try {
@@ -305,12 +391,11 @@
         </div>
 
         <div class="project-description">
-          ${
-            escapeHtml(
-              project.description ||
-              "No description",
-            )
-          }
+          ${escapeHtml(
+        project.description ||
+        "No description",
+      )
+        }
         </div>
       `;
     }
@@ -341,4 +426,5 @@
   </script>
 
 </body>
+
 </html>

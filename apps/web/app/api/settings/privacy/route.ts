@@ -2,12 +2,27 @@ import { db } from "@focus-trace/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
+import { getDesktopUserId } from "@/lib/desktop-auth";
 
-export async function GET() {
+async function getAuthenticatedUserId(request: Request) {
+    // Try Electron desktop token first
+    const desktopUserId = await getDesktopUserId(request);
+
+    if (desktopUserId) {
+        return desktopUserId;
+    }
+
+    // Otherwise try browser NextAuth session
+    const session = await getServerSession(authOptions);
+
+    return session?.user?.id ?? null;
+}
+
+export async function GET(request: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const userId = await getAuthenticatedUserId(request);
 
-        if (!session?.user?.id) {
+        if (!userId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -17,14 +32,13 @@ export async function GET() {
             );
         }
 
-        const userId = session.user.id;
-
         let settings = await db.privacySettings.findUnique({
             where: {
                 userId,
             },
         });
 
+        // Create default settings if they don't exist
         if (!settings) {
             settings = await db.privacySettings.create({
                 data: {
@@ -40,12 +54,12 @@ export async function GET() {
             settings,
         });
     } catch (error) {
-        console.error("Privacy settings GET error:", error);
+        console.error("Privacy GET error:", error);
 
         return NextResponse.json(
             {
                 success: false,
-                error: "Failed to load privacy settings",
+                error: "Could not fetch privacy settings",
             },
             { status: 500 },
         );
@@ -54,9 +68,9 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const userId = await getAuthenticatedUserId(request);
 
-        if (!session?.user?.id) {
+        if (!userId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -66,35 +80,50 @@ export async function PATCH(request: Request) {
             );
         }
 
-        const userId = session.user.id;
-
         const body = await request.json();
 
-        if (
-            body.trackingEnabled !== undefined &&
-            typeof body.trackingEnabled !== "boolean"
-        ) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "trackingEnabled must be a boolean",
-                },
-                { status: 400 },
-            );
+        const data: {
+            trackingEnabled?: boolean;
+            retentionDays?: number;
+        } = {};
+
+        if (body.trackingEnabled !== undefined) {
+            if (typeof body.trackingEnabled !== "boolean") {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "trackingEnabled must be a boolean",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            data.trackingEnabled = body.trackingEnabled;
         }
 
-        if (
-            body.retentionDays !== undefined &&
-            (
+        if (body.retentionDays !== undefined) {
+            if (
                 !Number.isInteger(body.retentionDays) ||
                 body.retentionDays < 1 ||
                 body.retentionDays > 365
-            )
-        ) {
+            ) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "retentionDays must be an integer between 1 and 365",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            data.retentionDays = body.retentionDays;
+        }
+
+        if (Object.keys(data).length === 0) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "retentionDays must be an integer between 1 and 365",
+                    error: "No valid settings provided",
                 },
                 { status: 400 },
             );
@@ -104,18 +133,11 @@ export async function PATCH(request: Request) {
             where: {
                 userId,
             },
-            update: {
-                ...(body.trackingEnabled !== undefined && {
-                    trackingEnabled: body.trackingEnabled,
-                }),
-                ...(body.retentionDays !== undefined && {
-                    retentionDays: body.retentionDays,
-                }),
-            },
+            update: data,
             create: {
                 userId,
-                trackingEnabled: body.trackingEnabled ?? false,
-                retentionDays: body.retentionDays ?? 30,
+                trackingEnabled: data.trackingEnabled ?? false,
+                retentionDays: data.retentionDays ?? 30,
             },
         });
 
@@ -124,12 +146,12 @@ export async function PATCH(request: Request) {
             settings,
         });
     } catch (error) {
-        console.error("Privacy settings PATCH error:", error);
+        console.error("Privacy PATCH error:", error);
 
         return NextResponse.json(
             {
                 success: false,
-                error: "Failed to update privacy settings",
+                error: "Could not update privacy settings",
             },
             { status: 500 },
         );
