@@ -25,6 +25,12 @@ export default function SettingsPage() {
   const [error, setError] =
     useState("");
 
+  const [deletingData, setDeletingData] =
+    useState(false);
+
+  const [deleteMessage, setDeleteMessage] =
+    useState("");
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -39,7 +45,7 @@ export default function SettingsPage() {
         if (!response.ok) {
           throw new Error(
             data.error ||
-              "Failed to load settings",
+            "Failed to load settings",
           );
         }
 
@@ -93,7 +99,7 @@ export default function SettingsPage() {
       if (!response.ok) {
         throw new Error(
           data.error ||
-            "Failed to update settings",
+          "Failed to update settings",
         );
       }
 
@@ -118,6 +124,52 @@ export default function SettingsPage() {
       setSaving(false);
     }
   }
+
+  async function handleDeleteActivityData() {
+  const confirmed = window.confirm(
+    "Are you sure you want to permanently delete all your tracked activity data? This action cannot be undone.",
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setDeletingData(true);
+  setDeleteMessage("");
+
+  try {
+    const response = await fetch(
+      "/api/settings/privacy/data",
+      {
+        method: "DELETE",
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+          "Failed to delete activity data",
+      );
+    }
+
+    setDeleteMessage(
+      `Deleted ${data.deletedCount} activity records successfully.`,
+    );
+  } catch (error) {
+    console.error(
+      "Delete activity data error:",
+      error,
+    );
+
+    setDeleteMessage(
+      "Could not delete activity data.",
+    );
+  } finally {
+    setDeletingData(false);
+  }
+}
 
   if (loading) {
     return (
@@ -197,19 +249,17 @@ export default function SettingsPage() {
                     !settings.trackingEnabled,
                 })
               }
-              className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-                settings.trackingEnabled
-                  ? "bg-slate-900"
-                  : "bg-slate-300"
-              }`}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition ${settings.trackingEnabled
+                ? "bg-slate-900"
+                : "bg-slate-300"
+                }`}
               aria-label="Toggle activity tracking"
             >
               <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${
-                  settings.trackingEnabled
-                    ? "left-6"
-                    : "left-1"
-                }`}
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${settings.trackingEnabled
+                  ? "left-6"
+                  : "left-1"
+                  }`}
               />
             </button>
 
@@ -220,11 +270,10 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
 
               <div
-                className={`h-2.5 w-2.5 rounded-full ${
-                  settings.trackingEnabled
-                    ? "bg-green-500"
-                    : "bg-slate-400"
-                }`}
+                className={`h-2.5 w-2.5 rounded-full ${settings.trackingEnabled
+                  ? "bg-green-500"
+                  : "bg-slate-400"
+                  }`}
               />
 
               <span className="text-sm font-medium text-slate-700">
@@ -365,6 +414,38 @@ export default function SettingsPage() {
             generated timesheet entries are approved.
           </p>
 
+        </section>
+
+        <section className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-red-400">
+              Delete activity data
+            </h2>
+
+            <p className="mt-2 text-sm text-gray-400">
+              Permanently delete all tracked application
+              activity and its AI classifications.
+              Your existing timesheet entries will not
+              be deleted.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDeleteActivityData}
+            disabled={deletingData}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deletingData
+              ? "Deleting..."
+              : "Delete my activity data"}
+          </button>
+
+          {deleteMessage && (
+            <p className="mt-3 text-sm text-gray-400">
+              {deleteMessage}
+            </p>
+          )}
         </section>
 
       </div>
