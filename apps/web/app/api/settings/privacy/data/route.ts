@@ -1,37 +1,47 @@
 import { db } from "@focus-trace/db";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-
-const TEST_USER_ID =
-  "6d816c76-a738-46a7-8b14-81ce98387b5e";
+import { authOptions } from "@/auth";
 
 export async function DELETE() {
-  try {
-    const result =
-      await db.activity.deleteMany({
-        where: {
-          userId: TEST_USER_ID,
-        },
-      });
+    try {
+        const session = await getServerSession(authOptions);
 
-    return NextResponse.json({
-      success: true,
-      deletedCount: result.count,
-      message:
-        "All activity data has been deleted.",
-    });
-  } catch (error) {
-    console.error(
-      "Activity data deletion error:",
-      error,
-    );
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
 
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Failed to delete activity data",
-      },
-      { status: 500 },
-    );
-  }
+        const userId = session.user.id;
+
+        const result = await db.activity.deleteMany({
+            where: {
+                userId,
+            },
+        });
+
+        return NextResponse.json({
+            success: true,
+            deletedCount: result.count,
+            message: "All activity data has been deleted.",
+        });
+    } catch (error) {
+        console.error(
+            "Activity data deletion error:",
+            error,
+        );
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Failed to delete activity data",
+            },
+            { status: 500 },
+        );
+    }
 }
