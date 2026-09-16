@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld(
         "project:set",
         projectId,
       ),
+
+    saveDesktopToken: (token: string) =>
+      ipcRenderer.invoke("desktop-token:save", token),
+
+    hasDesktopToken: () =>
+      ipcRenderer.invoke("desktop-token:exists"),
   },
 );
 

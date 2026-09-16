@@ -2,12 +2,27 @@ import { db } from "@focus-trace/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
+import { getDesktopUserId } from "@/lib/desktop-auth";
 
-export async function GET() {
+async function getAuthenticatedUserId(request: Request) {
+    // Try Electron desktop token first
+    const desktopUserId = await getDesktopUserId(request);
+
+    if (desktopUserId) {
+        return desktopUserId;
+    }
+
+    // Otherwise try browser NextAuth session
+    const session = await getServerSession(authOptions);
+
+    return session?.user?.id ?? null;
+}
+
+export async function GET(request: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const userId = await getAuthenticatedUserId(request);
 
-        if (!session?.user?.id) {
+        if (!userId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -16,8 +31,6 @@ export async function GET() {
                 { status: 401 },
             );
         }
-
-        const userId = session.user.id;
 
         const activities = await db.activity.findMany({
             where: {
@@ -51,9 +64,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const userId = await getAuthenticatedUserId(req);
 
-        if (!session?.user?.id) {
+        if (!userId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -62,8 +75,6 @@ export async function POST(req: Request) {
                 { status: 401 },
             );
         }
-
-        const userId = session.user.id;
 
         const body = await req.json();
 
@@ -115,7 +126,7 @@ export async function POST(req: Request) {
 
         /*
          * If a projectId was provided,
-         * make sure that project belongs to the logged-in user.
+         * make sure that project belongs to this user.
          */
         let projectId: string | null = null;
 

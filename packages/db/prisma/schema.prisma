@@ -31,6 +31,8 @@ model User {
   activities      Activity[]
   timesheets      Timesheet[]
   privacySettings PrivacySettings?
+
+  desktopDevices DesktopDevice[]
 }
 
 model Account {
@@ -162,4 +164,17 @@ model PrivacySettings {
 
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DesktopDevice {
+  id         String    @id @default(uuid())
+  name       String?
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

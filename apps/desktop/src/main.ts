@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  safeStorage,
 } from "electron";
 
 import path from "node:path";
@@ -47,6 +48,71 @@ function saveConfig(config: Record<string, unknown>) {
   }
 }
 
+function saveDesktopToken(token: string) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error(
+      "Secure storage is not available on this machine",
+    );
+  }
+
+  const encryptedToken = safeStorage.encryptString(token);
+
+  const config = readConfig();
+
+  config.desktopToken = encryptedToken.toString("base64");
+
+  saveConfig(config);
+}
+
+function getDesktopToken(): string | null {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.error("Secure storage is not available");
+      return null;
+    }
+
+    const config = readConfig();
+
+    if (typeof config.desktopToken !== "string") {
+      return null;
+    }
+
+    const encryptedToken = Buffer.from(
+      config.desktopToken,
+      "base64",
+    );
+
+    return safeStorage.decryptString(encryptedToken);
+  } catch (error) {
+    console.error("Could not decrypt desktop token:", error);
+    return null;
+  }
+}
+
+async function desktopFetch(
+  url: string,
+  options: RequestInit = {},
+) {
+  const token = getDesktopToken();
+
+  if (!token) {
+    throw new Error("Desktop device is not paired");
+  }
+
+  const headers = new Headers(options.headers);
+
+  headers.set("Authorization", `Bearer ${token}`);
+
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}
+
 function getActiveProjectId(): string | null {
   const config = readConfig();
 
@@ -87,7 +153,7 @@ function createWindow() {
  */
 ipcMain.handle("projects:get", async () => {
   try {
-    const response = await fetch(
+    const response = await desktopFetch(
       `${API_URL}/api/projects`,
     );
 
@@ -113,6 +179,37 @@ ipcMain.handle("projects:get", async () => {
     };
   }
 });
+
+ipcMain.handle("desktop-token:save", async (_event, token: string) => {
+  try {
+    if (!token || typeof token !== "string") {
+      return {
+        success: false,
+        error: "Invalid desktop token",
+      };
+    }
+
+    saveDesktopToken(token);
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Could not save desktop token:", error);
+
+    return {
+      success: false,
+      error: "Could not securely save desktop token",
+    };
+  }
+});
+
+ipcMain.handle("desktop-token:exists", async () => {
+  return {
+    success: getDesktopToken() !== null,
+  };
+});
+
 
 /*
  * Save selected project
