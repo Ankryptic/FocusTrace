@@ -15,6 +15,32 @@ type Activity = {
   endedAt: Date;
 };
 
+async function isTrackingEnabled() {
+  try {
+    const response = await fetch(
+      "http://localhost:3000/api/settings/privacy",
+    );
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await response.json();
+
+    return (
+      data.settings?.trackingEnabled ===
+      true
+    );
+  } catch (error) {
+    console.error(
+      "Could not check tracking permission:",
+      error,
+    );
+
+    return false;
+  }
+}
+
 export function startActivityTracker(
   getProjectId: ProjectIdGetter,
 ) {
@@ -25,6 +51,32 @@ export function startActivityTracker(
 
   async function poll() {
     try {
+      const trackingEnabled =
+        await isTrackingEnabled();
+
+      if (!trackingEnabled) {
+        /*
+         * Stop the current session if tracking
+         * was disabled while an activity was running.
+         */
+        if (currentActivity) {
+          const now = new Date();
+
+          currentActivity.endedAt =
+            now;
+
+          await saveActivity(
+            currentActivity,
+            getProjectId(),
+          );
+
+          currentActivity = null;
+          previousWindowKey = "";
+        }
+
+        return;
+      }
+
       const activeWindow =
         await getActiveWindow();
 
