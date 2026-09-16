@@ -1,116 +1,173 @@
-import { json } from "node:stream/consumers";
-import { ActiveWindow, getActiveWindow } from "./active-window.js";
+import {
+  getActiveWindow,
+} from "./active-window.js";
 
-type ActivitySession = {
-    application: string;
-    windowTitle: string;
-    processId: number;
-    startedAt: Date;
-    endedAt: Date;
+const API_URL =
+  "http://localhost:3000/api/activities";
+
+type ProjectIdGetter =
+  () => string | null;
+
+type Activity = {
+  application: string;
+  windowTitle: string | null;
+  startedAt: Date;
+  endedAt: Date;
 };
 
-let currentActivity: ActivitySession | null = null;
-
-function sameWindow(
-    a: ActivitySession,
-    b: ActiveWindow,
+export function startActivityTracker(
+  getProjectId: ProjectIdGetter,
 ) {
-    return (
-        a.application === b.application &&
-        a.windowTitle === b.windowTitle &&
-        a.processId === b.processId
-    );
-}
+  let currentActivity: Activity | null =
+    null;
 
-function startActivity(window: ActiveWindow) {
-    currentActivity = {
-        application: window.application,
-        windowTitle: window.windowTitle,
-        processId: window.processId,
-        startedAt: new Date(),
-        endedAt: new Date()
-    };
+  let previousWindowKey = "";
 
-    console.log("\n▶ Activity started");
-    console.log(currentActivity);
-}
-
-async function saveActivity(activity: ActivitySession) {
-    const res = await fetch("http://localhost:3000/api/activities", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            application: activity.application,
-            windowTitle: activity.windowTitle,
-            processId: activity.processId,
-            startedAt: activity.startedAt.toISOString(),
-            endedAt: activity.endedAt.toISOString()
-        }),
-    });
-
-    if (!res.ok) {
-        const error = await res.text();
-
-        throw new Error(`Activity API Failed (${res.status}): ${error}`);
-    }
-
-    const result = await res.json();
-
-    console.log("✓ Activity saved");
-    console.log(result);
-}
-
-async function stopActivity() {
-    if (!currentActivity) {
-        return;
-    }
-
-    currentActivity.endedAt = new Date();
-
-    const duration = Math.floor(
-        (currentActivity.endedAt.getTime() - currentActivity.startedAt.getTime()) / 1000
-    );
-
-    console.log("\n■ Activity stopped");
-    console.log({
-        ...currentActivity,
-        durationSeconds: duration,
-    });
-
+  async function poll() {
     try {
-        await saveActivity(currentActivity)
-    } catch (error) {
-        console.error("Failed to save activity: ", error);
-    }
+      const activeWindow =
+        await getActiveWindow();
 
-    currentActivity = null;
+      if (!activeWindow) {
+        return;
+      }
+
+      const windowKey =
+        `${activeWindow.application}:${activeWindow.windowTitle}`;
+
+      /*
+       * Nothing changed.
+       */
+      if (windowKey === previousWindowKey) {
+        return;
+      }
+
+      const now = new Date();
+
+      /*
+       * Save previous activity
+       */
+      if (currentActivity) {
+        currentActivity.endedAt = now;
+
+        await saveActivity(
+          currentActivity,
+          getProjectId(),
+        );
+      }
+
+      /*
+       * Start new activity
+       */
+      currentActivity = {
+        application:
+          activeWindow.application,
+
+        windowTitle:
+          activeWindow.windowTitle,
+
+        startedAt: now,
+
+        endedAt: now,
+      };
+
+      previousWindowKey = windowKey;
+
+      console.log(
+        "Activity started:",
+        currentActivity,
+      );
+
+    } catch (error) {
+      console.error(
+        "Activity tracker error:",
+        error,
+      );
+    }
+  }
+
+  /*
+   * Poll every 2 seconds.
+   */
+  setInterval(poll, 2000);
+
+  /*
+   * Run immediately.
+   */
+  poll();
 }
 
-export function startActivityTracker() {
-    console.log("FocusTrace Activity Tracker Started")
+async function saveActivity(
+  activity: Activity,
+  projectId: string | null,
+) {
+  try {
+    /*
+     * Ignore extremely short activities.
+     */
+    const duration =
+      activity.endedAt.getTime() -
+      activity.startedAt.getTime();
 
-    setInterval(async () => {
-        try {
-            const activeWindow = await getActiveWindow()
+    if (duration < 1000) {
+      return;
+    }
 
-            if (!activeWindow) {
-                return;
-            }
+    console.log(
+      "Saving activity:",
+      {
+        ...activity,
+        projectId,
+      },
+    );
 
-            if (!currentActivity) {
-                startActivity(activeWindow);
-                return;
-            }
+    const response =
+      await fetch(API_URL, {
+        method: "POST",
 
-            if (!sameWindow(currentActivity, activeWindow)) {
-                stopActivity();
-                startActivity(activeWindow);
-            }
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
 
-        } catch (error) {
-            console.error("Activity Tracking Failed: ", error);
-        }
-    }, 2000);
+        body: JSON.stringify({
+          application:
+            activity.application,
+
+          windowTitle:
+            activity.windowTitle,
+
+          startedAt:
+            activity.startedAt.toISOString(),
+
+          endedAt:
+            activity.endedAt.toISOString(),
+
+          projectId,
+        }),
+      });
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "Activity API error:",
+        data,
+      );
+
+      return;
+    }
+
+    console.log(
+      "Activity saved:",
+      data,
+    );
+
+  } catch (error) {
+    console.error(
+      "Could not save activity:",
+      error,
+    );
+  }
 }

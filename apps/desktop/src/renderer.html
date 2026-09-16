@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>FocusTrace</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 32px;
+    }
+
+    .header {
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -1px;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: #64748b;
+      font-size: 15px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 28px;
+
+      box-shadow:
+        0 10px 30px rgba(15, 23, 42, 0.06);
+    }
+
+    .label {
+      display: block;
+      margin-bottom: 10px;
+
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    select {
+      width: 100%;
+      padding: 13px 14px;
+
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+
+      background: white;
+      color: #0f172a;
+
+      font-size: 15px;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: #64748b;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      margin-top: 24px;
+      padding: 14px;
+
+      background: #f8fafc;
+      border-radius: 10px;
+
+      font-size: 14px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+
+      border-radius: 50%;
+      background: #22c55e;
+    }
+
+    .project-info {
+      margin-top: 24px;
+      padding-top: 20px;
+
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .project-name {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .project-description {
+      margin-top: 6px;
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    .error {
+      margin-top: 16px;
+      color: #dc2626;
+      font-size: 14px;
+    }
+
+    .loading {
+      color: #64748b;
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="container">
+
+    <header class="header">
+      <div class="logo">
+        FocusTrace
+      </div>
+
+      <div class="subtitle">
+        Activity tracking & timesheet intelligence
+      </div>
+    </header>
+
+    <section class="card">
+
+      <label
+        class="label"
+        for="project"
+      >
+        Active Project
+      </label>
+
+      <select id="project">
+        <option value="">
+          Loading projects...
+        </option>
+      </select>
+
+      <div class="status">
+        <span class="dot"></span>
+
+        <span>
+          Tracking is active
+        </span>
+      </div>
+
+      <div
+        id="projectInfo"
+        class="project-info"
+      >
+        <div class="loading">
+          Loading project...
+        </div>
+      </div>
+
+      <div
+        id="error"
+        class="error"
+      ></div>
+
+    </section>
+
+  </main>
+
+  <script>
+    const projectSelect =
+      document.getElementById("project");
+
+    const projectInfo =
+      document.getElementById("projectInfo");
+
+    const errorElement =
+      document.getElementById("error");
+
+    let projects = [];
+
+    async function loadProjects() {
+      try {
+        const result =
+          await window.focusTrace.getProjects();
+
+        if (!result.success) {
+          throw new Error(
+            result.error ||
+            "Could not load projects",
+          );
+        }
+
+        projects = result.projects;
+
+        const activeResult =
+          await window.focusTrace
+            .getActiveProject();
+
+        const activeProjectId =
+          activeResult.projectId;
+
+        projectSelect.innerHTML = "";
+
+        if (projects.length === 0) {
+          const option =
+            document.createElement("option");
+
+          option.value = "";
+          option.textContent =
+            "No projects available";
+
+          projectSelect.appendChild(option);
+
+          projectInfo.innerHTML =
+            "<div class='loading'>Create a project from the web dashboard first.</div>";
+
+          return;
+        }
+
+        for (const project of projects) {
+          const option =
+            document.createElement("option");
+
+          option.value = project.id;
+          option.textContent = project.name;
+
+          if (project.id === activeProjectId) {
+            option.selected = true;
+          }
+
+          projectSelect.appendChild(option);
+        }
+
+        /*
+         * If no project was previously selected,
+         * select the first project.
+         */
+        if (!activeProjectId) {
+          const firstProject =
+            projects[0];
+
+          await window.focusTrace
+            .setActiveProject(
+              firstProject.id,
+            );
+
+          projectSelect.value =
+            firstProject.id;
+        }
+
+        updateProjectInfo();
+
+      } catch (error) {
+        console.error(error);
+
+        errorElement.textContent =
+          "Could not load projects. Make sure the web app is running.";
+      }
+    }
+
+    function updateProjectInfo() {
+      const project =
+        projects.find(
+          (item) =>
+            item.id ===
+            projectSelect.value,
+        );
+
+      if (!project) {
+        projectInfo.innerHTML = "";
+        return;
+      }
+
+      projectInfo.innerHTML = `
+        <div class="project-name">
+          ${escapeHtml(project.name)}
+        </div>
+
+        <div class="project-description">
+          ${
+            escapeHtml(
+              project.description ||
+              "No description",
+            )
+          }
+        </div>
+      `;
+    }
+
+    projectSelect.addEventListener(
+      "change",
+      async () => {
+        const projectId =
+          projectSelect.value || null;
+
+        await window.focusTrace
+          .setActiveProject(projectId);
+
+        updateProjectInfo();
+      },
+    );
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    loadProjects();
+  </script>
+
+</body>
+</html>
