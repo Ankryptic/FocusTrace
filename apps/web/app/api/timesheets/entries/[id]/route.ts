@@ -1,5 +1,7 @@
 import { db } from "@focus-trace/db";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { authOptions } from "@/auth";
 
 type RouteContext = {
     params: Promise<{ id: string }>;
@@ -10,12 +12,32 @@ export async function PATCH(
     context: RouteContext,
 ) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
         const { id } = await context.params;
         const body = await req.json();
 
-        const existingEntry = await db.timesheetEntry.findUnique({
+        /*
+         * Find the entry and verify that its timesheet
+         * belongs to the authenticated user.
+         */
+        const existingEntry = await db.timesheetEntry.findFirst({
             where: {
-                id
+                id,
+                timesheet: {
+                    userId,
+                },
             },
         });
 
@@ -23,7 +45,7 @@ export async function PATCH(
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Timesheet entry not found"
+                    error: "Timesheet entry not found",
                 },
                 { status: 404 },
             );
@@ -33,16 +55,22 @@ export async function PATCH(
             startTime?: Date;
             endTime?: Date;
             description?: string;
-            category?: "DESIGN" | "RESEARCH" | "COMMUNICATION" | "DOCUMENTATION" | "DEVELOPMENT" | "OTHER";
+            category?:
+                | "DESIGN"
+                | "RESEARCH"
+                | "COMMUNICATION"
+                | "DOCUMENTATION"
+                | "DEVELOPMENT"
+                | "OTHER";
             confidence?: number | null;
             approved?: boolean;
-            projectId?: string | null
+            projectId?: string | null;
         } = {};
 
-        if(body.startTime !== undefined){
+        if (body.startTime !== undefined) {
             const startTime = new Date(body.startTime);
 
-            if(Number.isNaN(startTime.getTime())){
+            if (Number.isNaN(startTime.getTime())) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -55,27 +83,29 @@ export async function PATCH(
             data.startTime = startTime;
         }
 
-        if(body.endTime !== undefined){
+        if (body.endTime !== undefined) {
             const endTime = new Date(body.endTime);
 
-            if(Number.isNaN(endTime.getTime())){
+            if (Number.isNaN(endTime.getTime())) {
                 return NextResponse.json(
                     {
                         success: false,
                         error: "Invalid endTime",
                     },
                     { status: 400 },
-                )
+                );
             }
 
             data.endTime = endTime;
         }
 
-        const finalStartTime = data.startTime ?? existingEntry.startTime;
+        const finalStartTime =
+            data.startTime ?? existingEntry.startTime;
 
-        const finalEndTime = data.endTime ?? existingEntry.endTime;
+        const finalEndTime =
+            data.endTime ?? existingEntry.endTime;
 
-        if(finalEndTime <= finalStartTime){
+        if (finalEndTime <= finalStartTime) {
             return NextResponse.json(
                 {
                     success: false,
@@ -85,15 +115,15 @@ export async function PATCH(
             );
         }
 
-        if(body.description !== undefined){
-            if(
-                typeof body.description !== "string" || 
+        if (body.description !== undefined) {
+            if (
+                typeof body.description !== "string" ||
                 !body.description.trim()
-            ){
+            ) {
                 return NextResponse.json(
                     {
                         success: false,
-                        error: "Description cannot be empty."
+                        error: "Description cannot be empty.",
                     },
                     { status: 400 },
                 );
@@ -102,17 +132,17 @@ export async function PATCH(
             data.description = body.description.trim();
         }
 
-        if(body.category !== undefined){
+        if (body.category !== undefined) {
             const validCategories = [
                 "DESIGN",
                 "RESEARCH",
                 "COMMUNICATION",
                 "DOCUMENTATION",
                 "DEVELOPMENT",
-                "OTHER"
+                "OTHER",
             ];
 
-            if(!validCategories.includes(body.category)){
+            if (!validCategories.includes(body.category)) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -121,21 +151,23 @@ export async function PATCH(
                     { status: 400 },
                 );
             }
+
+            data.category = body.category;
         }
 
-        if(body.confidence !== undefined){
-            if(
-                body.confidence !== null && 
+        if (body.confidence !== undefined) {
+            if (
+                body.confidence !== null &&
                 (
-                    typeof body.confidence !== "number" || 
-                    body.confidence < 0 || 
+                    typeof body.confidence !== "number" ||
+                    body.confidence < 0 ||
                     body.confidence > 1
                 )
             ) {
                 return NextResponse.json(
                     {
                         success: false,
-                        error: "Confidence must be 0 and 1."
+                        error: "Confidence must be between 0 and 1.",
                     },
                     { status: 400 },
                 );
@@ -144,31 +176,56 @@ export async function PATCH(
             data.confidence = body.confidence;
         }
 
-        if(body.approved !== undefined){
-            if(typeof body.approved !== "boolean"){
+        if (body.approved !== undefined) {
+            if (typeof body.approved !== "boolean") {
                 return NextResponse.json(
                     {
                         success: false,
-                        error: "Approved must be boolean."
+                        error: "Approved must be boolean.",
                     },
                     { status: 400 },
-                )
+                );
             }
 
             data.approved = body.approved;
         }
 
-        if(body.projectId !== undefined){
-            data.projectId = body.projectId;
+        /*
+         * If projectId is being changed,
+         * verify that the project belongs to this user.
+         */
+        if (body.projectId !== undefined) {
+            if (body.projectId === null) {
+                data.projectId = null;
+            } else {
+                const project = await db.project.findFirst({
+                    where: {
+                        id: body.projectId,
+                        userId,
+                    },
+                });
+
+                if (!project) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: "Project not found",
+                        },
+                        { status: 404 },
+                    );
+                }
+
+                data.projectId = project.id;
+            }
         }
 
         const entry = await db.timesheetEntry.update({
             where: {
-                id
+                id,
             },
-            data, 
+            data,
             include: {
-                project: true
+                project: true,
             },
         });
 
@@ -176,10 +233,12 @@ export async function PATCH(
             success: true,
             message: "Timesheet entry updated.",
             entry,
-        })
-        
+        });
     } catch (error) {
-        console.error("Update timesheet entry error: ", error);
+        console.error(
+            "Update timesheet entry error:",
+            error,
+        );
 
         return NextResponse.json(
             {
@@ -189,30 +248,49 @@ export async function PATCH(
             { status: 500 },
         );
     }
-
 }
 
 export async function DELETE(
     req: Request,
     context: RouteContext,
-){
+) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
         const { id } = await context.params;
 
-        const existingEntry = await db.timesheetEntry.findUnique({
+        /*
+         * Only find the entry if its parent timesheet
+         * belongs to the authenticated user.
+         */
+        const existingEntry = await db.timesheetEntry.findFirst({
             where: {
-                id
-            }
+                id,
+                timesheet: {
+                    userId,
+                },
+            },
         });
 
-        if(!existingEntry){
+        if (!existingEntry) {
             return NextResponse.json(
                 {
                     success: false,
                     error: "Timesheet entry not found.",
                 },
                 { status: 404 },
-            )
+            );
         }
 
         await db.timesheetEntry.delete({
@@ -223,11 +301,13 @@ export async function DELETE(
 
         return NextResponse.json({
             success: true,
-            message: "Timesheet entry deleted."
-        })
-
+            message: "Timesheet entry deleted.",
+        });
     } catch (error) {
-        console.error("Delete timesheet error: ", error)
+        console.error(
+            "Delete timesheet error:",
+            error,
+        );
 
         return NextResponse.json(
             {

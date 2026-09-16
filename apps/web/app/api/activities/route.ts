@@ -1,17 +1,31 @@
 import { db } from "@focus-trace/db";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-
-const TEST_USER_ID = "6d816c76-a738-46a7-8b14-81ce98387b5e";
+import { authOptions } from "@/auth";
 
 export async function GET() {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const activities = await db.activity.findMany({
             where: {
-                userId: TEST_USER_ID,
+                userId,
             },
             orderBy: {
-                startedAt: "desc"
-            }, 
+                startedAt: "desc",
+            },
             include: {
                 project: true,
                 classification: true,
@@ -23,7 +37,7 @@ export async function GET() {
             activities,
         });
     } catch (error) {
-        console.error("Get activities error: ", error);
+        console.error("Get activities error:", error);
 
         return NextResponse.json(
             {
@@ -35,25 +49,39 @@ export async function GET() {
     }
 }
 
-export async function POST(req: Request){
+export async function POST(req: Request) {
     try {
-        const body = await req.json();
+        const session = await getServerSession(authOptions);
 
-        if(!body.application){
+        if (!session?.user?.id) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Application is required"
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
+        const body = await req.json();
+
+        if (!body.application) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Application is required",
                 },
                 { status: 400 },
             );
         }
 
-        if(!body.startedAt || !body.endedAt){
+        if (!body.startedAt || !body.endedAt) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "StartedAt and EndedAt are required"
+                    error: "StartedAt and EndedAt are required",
                 },
                 { status: 400 },
             );
@@ -62,20 +90,20 @@ export async function POST(req: Request){
         const startedAt = new Date(body.startedAt);
         const endedAt = new Date(body.endedAt);
 
-        if(
+        if (
             Number.isNaN(startedAt.getTime()) ||
             Number.isNaN(endedAt.getTime())
-        ){
+        ) {
             return NextResponse.json(
                 {
-                    success: false, 
+                    success: false,
                     error: "Invalid date format",
                 },
                 { status: 400 },
             );
         }
 
-        if(endedAt <= startedAt){
+        if (endedAt <= startedAt) {
             return NextResponse.json(
                 {
                     success: false,
@@ -85,7 +113,36 @@ export async function POST(req: Request){
             );
         }
 
-        const duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
+        /*
+         * If a projectId was provided,
+         * make sure that project belongs to the logged-in user.
+         */
+        let projectId: string | null = null;
+
+        if (body.projectId) {
+            const project = await db.project.findFirst({
+                where: {
+                    id: body.projectId,
+                    userId,
+                },
+            });
+
+            if (!project) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Project not found",
+                    },
+                    { status: 404 },
+                );
+            }
+
+            projectId = project.id;
+        }
+
+        const duration = Math.floor(
+            (endedAt.getTime() - startedAt.getTime()) / 1000,
+        );
 
         const activity = await db.activity.create({
             data: {
@@ -94,35 +151,40 @@ export async function POST(req: Request){
                 startedAt,
                 endedAt,
                 duration,
-                userId: TEST_USER_ID,
-                projectId: body.projectId ?? null,
+                userId,
+                projectId,
             },
             include: {
                 project: true,
             },
         });
 
-        // ask ai service to classify
+        // Ask AI service to classify the activity
         try {
-            const aiResponse = await fetch("http://127.0.0.1:8000/classify", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
+            const aiResponse = await fetch(
+                "http://127.0.0.1:8000/classify",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        application: activity.application,
+                        windowTitle: activity.windowTitle,
+                    }),
                 },
-                body: JSON.stringify({
-                    application: activity.application,
-                    windowTitle: activity.windowTitle
-                }),
-            })
+            );
 
-            if(!aiResponse.ok){
-                throw new Error(`AI service returned ${aiResponse.status}`);
+            if (!aiResponse.ok) {
+                throw new Error(
+                    `AI service returned ${aiResponse.status}`,
+                );
             }
 
             const aiResult = await aiResponse.json();
             const classification = aiResult.classification;
 
-            // save classification in PostgreSQL
+            // Save classification in PostgreSQL
             await db.activityClassification.create({
                 data: {
                     activityId: activity.id,
@@ -130,15 +192,18 @@ export async function POST(req: Request){
                     confidence: classification.confidence,
                     reason: classification.reason,
                 },
-            })
+            });
 
-            console.log("✓ Activity classified:", classification);
+            console.log(
+                "✓ Activity classified:",
+                classification,
+            );
         } catch (error) {
-            // Classification failure should NOT delete the actvity
-            console.log("AI classification failed: ", error);
+            // Classification failure should NOT delete the activity
+            console.log("AI classification failed:", error);
         }
 
-        // Return the activity
+        // Return the saved activity
         const savedActivity = await db.activity.findUnique({
             where: {
                 id: activity.id,
@@ -146,24 +211,23 @@ export async function POST(req: Request){
             include: {
                 project: true,
                 classification: true,
-            }
+            },
         });
 
         return NextResponse.json(
             {
                 success: true,
-                activity: savedActivity
+                activity: savedActivity,
             },
             { status: 201 },
         );
-
     } catch (error) {
-        console.error("Create Activity error: ", error);
+        console.error("Create Activity error:", error);
 
         return NextResponse.json(
             {
                 success: false,
-                error: "Could not create activity"
+                error: "Could not create activity",
             },
             { status: 500 },
         );

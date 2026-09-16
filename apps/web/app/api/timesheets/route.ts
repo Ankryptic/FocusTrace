@@ -1,18 +1,32 @@
 import { db } from "@focus-trace/db";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { authOptions } from "@/auth";
 
-const TEST_USER_ID = "6d816c76-a738-46a7-8b14-81ce98387b5e";
-
-export async function GET(req: Request){
+export async function GET(req: Request) {
     try {
-        const { searchParams } = new URL(req.url);
-        const dateParam = searchParams.get("date");
+        const session = await getServerSession(authOptions);
 
-        if(!dateParam){
+        if (!session?.user?.id) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Date is required. Use YYYY-MM-DD."
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
+        const { searchParams } = new URL(req.url);
+        const dateParam = searchParams.get("date");
+
+        if (!dateParam) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Date is required. Use YYYY-MM-DD.",
                 },
                 { status: 400 },
             );
@@ -21,11 +35,11 @@ export async function GET(req: Request){
         // Validate YYYY-MM-DD
         const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(dateParam);
 
-        if(!dateMatch){
+        if (!dateMatch) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Invalid date format. Use YYYY-MM-DD."
+                    error: "Invalid date format. Use YYYY-MM-DD.",
                 },
                 { status: 400 },
             );
@@ -34,15 +48,14 @@ export async function GET(req: Request){
         const startOfDay = new Date(`${dateParam}T00:00:00.000Z`);
         const endOfDay = new Date(`${dateParam}T23:59:59.999Z`);
 
-
-        if(
-            Number.isNaN(startOfDay.getTime()) || 
+        if (
+            Number.isNaN(startOfDay.getTime()) ||
             Number.isNaN(endOfDay.getTime())
-        ){
+        ) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Invalid Date"
+                    error: "Invalid Date",
                 },
                 { status: 400 },
             );
@@ -50,7 +63,7 @@ export async function GET(req: Request){
 
         const timesheet = await db.timesheet.findFirst({
             where: {
-                userId: TEST_USER_ID,
+                userId,
                 date: startOfDay,
             },
             include: {
@@ -59,17 +72,17 @@ export async function GET(req: Request){
                         project: true,
                     },
                     orderBy: {
-                        startTime: "asc"
+                        startTime: "asc",
                     },
-                }
-            }
+                },
+            },
         });
 
-        if(!timesheet){
+        if (!timesheet) {
             return NextResponse.json({
                 success: true,
                 timesheet: null,
-                entries: []
+                entries: [],
             });
         }
 
@@ -79,12 +92,12 @@ export async function GET(req: Request){
             entries: timesheet.entries,
         });
     } catch (error) {
-        console.error("Get timesheet error: ", error);
+        console.error("Get timesheet error:", error);
 
         return NextResponse.json(
             {
                 success: false,
-                error: "Could not fetch timesheet."
+                error: "Could not fetch timesheet.",
             },
             { status: 500 },
         );
@@ -93,6 +106,20 @@ export async function GET(req: Request){
 
 export async function POST(req: Request) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const body = await req.json();
 
         const dateParam = body.date;
@@ -120,10 +147,23 @@ export async function POST(req: Request) {
         const startOfDay = new Date(`${dateParam}T00:00:00.000Z`);
         const endOfDay = new Date(`${dateParam}T23:59:59.999Z`);
 
-        // Get classified activities for the day
+        if (
+            Number.isNaN(startOfDay.getTime()) ||
+            Number.isNaN(endOfDay.getTime())
+        ) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Invalid Date",
+                },
+                { status: 400 },
+            );
+        }
+
+        // Get classified activities belonging to the logged-in user
         const activities = await db.activity.findMany({
             where: {
-                userId: TEST_USER_ID,
+                userId,
                 startedAt: {
                     gte: startOfDay,
                     lte: endOfDay,
@@ -150,10 +190,10 @@ export async function POST(req: Request) {
             });
         }
 
-        // Find or create timesheet
+        // Find or create timesheet for this user
         let timesheet = await db.timesheet.findFirst({
             where: {
-                userId: TEST_USER_ID,
+                userId,
                 date: startOfDay,
             },
         });
@@ -161,7 +201,7 @@ export async function POST(req: Request) {
         if (!timesheet) {
             timesheet = await db.timesheet.create({
                 data: {
-                    userId: TEST_USER_ID,
+                    userId,
                     date: startOfDay,
                 },
             });
@@ -182,7 +222,13 @@ export async function POST(req: Request) {
         type GroupedActivity = {
             startTime: Date;
             endTime: Date;
-            category: "DESIGN" | "RESEARCH" | "COMMUNICATION" | "DOCUMENTATION" | "DEVELOPMENT" | "OTHER";
+            category:
+                | "DESIGN"
+                | "RESEARCH"
+                | "COMMUNICATION"
+                | "DOCUMENTATION"
+                | "DEVELOPMENT"
+                | "OTHER";
             confidence: number;
             reason: string;
             projectId: string | null;
@@ -208,7 +254,6 @@ export async function POST(req: Request) {
                 activity.startedAt <= previous.endTime;
 
             if (isSameGroup) {
-                // Extend the existing group
                 previous.endTime = activity.endedAt;
 
                 // Keep the lower confidence value
@@ -220,7 +265,6 @@ export async function POST(req: Request) {
                 continue;
             }
 
-            // Start a new group
             groupedActivities.push({
                 startTime: activity.startedAt,
                 endTime: activity.endedAt,
@@ -244,17 +288,11 @@ export async function POST(req: Request) {
                 data: {
                     startTime: group.startTime,
                     endTime: group.endTime,
-
                     description: group.reason,
-
                     category: group.category,
-
                     confidence: group.confidence,
-
                     approved: false,
-
                     timesheetId: timesheet.id,
-
                     projectId: group.projectId,
                 },
                 include: {
