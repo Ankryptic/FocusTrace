@@ -1,14 +1,30 @@
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
+
 import { db } from "@focus-trace/db";
-import { serializeUseCacheCacheStore } from "next/dist/server/resume-data-cache/cache-store";
 import { NextResponse } from "next/server";
 
 const TEST_USER_ID = "6d816c76-a738-46a7-8b14-81ce98387b5e";
 
 export async function GET() {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const projects = await db.project.findMany({
             where: {
-                userId: TEST_USER_ID,
+                userId: userId,
             },
             orderBy: {
                 createdAt: "desc"
@@ -32,11 +48,25 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request){
+export async function POST(request: Request) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const body = await request.json();
 
-        if(!body.name || typeof body.name !== "string"){
+        if (!body.name || typeof body.name !== "string") {
             return NextResponse.json(
                 {
                     success: false,
@@ -50,7 +80,7 @@ export async function POST(request: Request){
             data: {
                 name: body.name,
                 description: body.description ?? null,
-                userId: TEST_USER_ID,
+                userId: userId,
             },
         });
 
@@ -60,7 +90,7 @@ export async function POST(request: Request){
                 project,
             },
             { status: 201 },
-        ); 
+        );
 
     } catch (error) {
         console.error("Create Project error: ", error);

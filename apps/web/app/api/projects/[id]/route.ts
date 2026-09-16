@@ -1,3 +1,6 @@
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
+
 import { db } from "@focus-trace/db";
 import { NextResponse } from "next/server";
 
@@ -12,18 +15,32 @@ type RouteContext = {
 export async function GET(
     request: Request,
     context: RouteContext
-){
+) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const { id } = await context.params;
 
         const project = await db.project.findFirst({
             where: {
                 id: id,
-                userId: TEST_USER_ID,
+                userId: userId,
             },
         });
 
-        if(!project){
+        if (!project) {
             return NextResponse.json(
                 {
                     success: false,
@@ -54,19 +71,33 @@ export async function GET(
 export async function PATCH(
     request: Request,
     context: RouteContext
-){
+) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const { id } = await context.params;
         const body = await request.json();
 
         const existingProject = await db.project.findFirst({
             where: {
                 id,
-                userId: TEST_USER_ID,
+                userId
             },
         });
 
-        if(!existingProject){
+        if (!existingProject) {
             return NextResponse.json(
                 {
                     success: false,
@@ -78,8 +109,8 @@ export async function PATCH(
 
         const project = await db.project.update({
             where: {
-                id, 
-            }, 
+                id,
+            },
             data: {
                 ...(body.name !== undefined && {
                     name: body.name,
@@ -114,15 +145,30 @@ export async function DELETE(
     context: RouteContext
 ) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const userId = session.user.id;
+
         const { id } = await context.params;
 
         const existingProject = await db.project.findFirst({
             where: {
                 id,
+                userId,
             },
         });
 
-        if(!existingProject){
+        if (!existingProject) {
             return NextResponse.json(
                 {
                     success: false,
