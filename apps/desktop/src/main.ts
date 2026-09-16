@@ -252,6 +252,42 @@ ipcMain.handle("project:get", async () => {
   };
 });
 
+/**
+ *  Toggle indicator
+ */
+ipcMain.handle("tracking:get-status", async () => {
+  try {
+    const response = await desktopFetch(
+      `${API_URL}/api/settings/privacy`,
+    );
+
+    if (!response.ok) {
+      return {
+        success: false,
+        trackingEnabled: false,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      trackingEnabled:
+        data.settings?.trackingEnabled === true,
+    };
+  } catch (error) {
+    console.error(
+      "Could not get tracking status:",
+      error,
+    );
+
+    return {
+      success: false,
+      trackingEnabled: false,
+    };
+  }
+});
+
 function start() {
   createWindow();
 

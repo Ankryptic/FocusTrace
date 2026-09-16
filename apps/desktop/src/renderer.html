@@ -201,10 +201,10 @@
       </select>
 
       <div class="status">
-        <span class="dot"></span>
+        <span id="trackingDot" class="dot"></span>
 
-        <span>
-          Tracking is active
+        <span id="trackingText">
+          Checking tracking status...
         </span>
       </div>
 
@@ -233,7 +233,8 @@
     const tokenInput = document.getElementById("desktop-token");
     const pairButton = document.getElementById("pair-button");
     const pairStatus = document.getElementById("pair-status");
-
+    const trackingDot = document.getElementById("trackingDot");
+    const trackingText = document.getElementById("trackingText");
 
     let projects = [];
 
@@ -280,6 +281,9 @@
 
         pairStatus.textContent =
           "Desktop paired successfully.";
+
+        await loadProjects();
+        await updateTrackingStatus();
       } catch (error) {
         console.error("Pairing error:", error);
 
@@ -291,6 +295,49 @@
     });
 
     checkPairingStatus();
+
+
+    async function updateTrackingStatus() {
+      try {
+        const result =
+          await window.focusTrace.getTrackingStatus();
+
+        if (!result.success) {
+          trackingText.textContent =
+            "Unable to check tracking status";
+
+          trackingDot.style.background =
+            "#94a3b8";
+
+          return;
+        }
+
+        if (result.trackingEnabled) {
+          trackingText.textContent =
+            "Tracking is active";
+
+          trackingDot.style.background =
+            "#22c55e";
+        } else {
+          trackingText.textContent =
+            "Tracking is disabled";
+
+          trackingDot.style.background =
+            "#ef4444";
+        }
+      } catch (error) {
+        console.error(
+          "Could not update tracking status:",
+          error,
+        );
+
+        trackingText.textContent =
+          "Unable to check tracking status";
+
+        trackingDot.style.background =
+          "#94a3b8";
+      }
+    }
 
     async function loadProjects() {
       try {
@@ -423,6 +470,12 @@
     }
 
     loadProjects();
+    updateTrackingStatus();
+
+    setInterval(
+      updateTrackingStatus,
+      5000,
+    );
   </script>
 
 </body>

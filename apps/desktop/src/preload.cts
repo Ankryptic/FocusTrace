@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("focusTrace", {
 
   hasDesktopToken: () =>
     ipcRenderer.invoke("desktop-token:exists"),
+
+  getTrackingStatus: () =>
+  ipcRenderer.invoke("tracking:get-status"),
 });
 
 console.log("FocusTrace preload loaded");
