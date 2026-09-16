@@ -1,7 +1,7 @@
 import { cleanupExpiredActivities } from "@/lib/retention";
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+async function cleanup(request: Request) {
   try {
     const cronSecret =
       process.env.CRON_SECRET;
@@ -59,4 +59,16 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(
+  request: Request,
+) {
+  return cleanup(request);
+}
+
+export async function POST(
+  request: Request,
+) {
+  return cleanup(request);
 }
