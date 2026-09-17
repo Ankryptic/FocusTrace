@@ -1,9 +1,7 @@
 import {
   getActiveWindow,
 } from "./active-window.js";
-
-const API_URL =
-  "http://localhost:3000/api/activities";
+import { API_URL } from "./config.js";
 
 type ProjectIdGetter =
   () => string | null;
@@ -17,13 +15,16 @@ type Activity = {
   endedAt: Date;
 };
 
+const ACTIVITIES_API_URL =
+  `${API_URL}/api/activities`;
+
 async function isTrackingEnabled(
   token: string,
   onTokenInvalid: TokenInvalidHandler,
 ) {
   try {
     const response = await fetch(
-      "http://localhost:3000/api/settings/privacy",
+      `${API_URL}/api/settings/privacy`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -207,7 +208,7 @@ async function saveActivity(
       },
     );
 
-    const response = await fetch(API_URL, {
+    const response = await fetch(ACTIVITIES_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

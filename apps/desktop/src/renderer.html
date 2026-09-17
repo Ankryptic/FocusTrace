@@ -410,17 +410,23 @@
         }
 
         /*
-         * If no project was previously selected,
-         * select the first project.
-         */
-        if (!activeProjectId) {
-          const firstProject =
-            projects[0];
+ * If no project was previously selected,
+ * OR the previously selected project
+ * no longer exists, select the first
+ * available project.
+ */
+        const activeProjectExists =
+          projects.some(
+            (project) =>
+              project.id === activeProjectId,
+          );
 
-          await window.focusTrace
-            .setActiveProject(
-              firstProject.id,
-            );
+        if (!activeProjectId || !activeProjectExists) {
+          const firstProject = projects[0];
+
+          await window.focusTrace.setActiveProject(
+            firstProject.id,
+          );
 
           projectSelect.value =
             firstProject.id;

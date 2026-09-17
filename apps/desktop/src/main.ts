@@ -8,13 +8,14 @@ import {
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { API_URL } from "./config.js";
 
 import { startActivityTracker } from "./activity-tracker.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_URL = "http://localhost:3000";
+// const API_URL = "https://focus-trace-web.vercel.app";
 
 let mainWindow: BrowserWindow | null = null;
 

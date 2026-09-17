@@ -1,14 +1,26 @@
 import { db } from "@focus-trace/db";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
-const TEST_USER_ID =
-  "6d816c76-a738-46a7-8b14-81ce98387b5e";
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        { status: 401 },
+      );
+    }
+
     const activities = await db.activity.findMany({
       where: {
-        userId: TEST_USER_ID,
+        userId: session.user.id,
       },
       include: {
         project: true,
