@@ -331,6 +331,10 @@ function start() {
       console.log("Desktop token revoked. Clearing local token.");
 
       clearDesktopToken();
+
+      mainWindow?.webContents.send(
+        "desktop-token:revoked",
+      );
     },
   );
 }

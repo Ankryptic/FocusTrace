@@ -296,6 +296,23 @@
 
     checkPairingStatus();
 
+    const removeTokenRevokedListener =
+      window.focusTrace.onDesktopTokenRevoked(() => {
+        tokenInput.value = "";
+
+        tokenInput.style.display = "";
+
+        pairButton.style.display = "";
+
+        pairButton.disabled = false;
+
+        pairStatus.textContent =
+          "Desktop was unpaired. Please pair again.";
+
+        updateTrackingStatus();
+        loadProjects();
+      });
+
 
     async function updateTrackingStatus() {
       try {

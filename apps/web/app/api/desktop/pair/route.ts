@@ -4,6 +4,56 @@ import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
 import { createHash, randomBytes } from "node:crypto";
 
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        { status: 401 },
+      );
+    }
+
+    const devices = await db.desktopDevice.findMany({
+      where: {
+        userId: session.user.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      devices,
+    });
+  } catch (error) {
+    console.error(
+      "Desktop devices error:",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to load desktop devices",
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     // 1. Make sure the user is logged in

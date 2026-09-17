@@ -7,6 +7,13 @@ type PrivacySettings = {
   retentionDays: number;
 };
 
+type DesktopDevice = {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
 export default function SettingsPage() {
   const [settings, setSettings] =
     useState<PrivacySettings | null>(
@@ -38,6 +45,18 @@ export default function SettingsPage() {
     useState(false);
 
   const [tokenMessage, setTokenMessage] =
+    useState("");
+
+  const [desktopDevices, setDesktopDevices] =
+    useState<DesktopDevice[]>([]);
+
+  const [loadingDevices, setLoadingDevices] =
+    useState(true);
+
+  const [unpairingDeviceId, setUnpairingDeviceId] =
+    useState<string | null>(null);
+
+  const [deviceMessage, setDeviceMessage] =
     useState("");
 
   useEffect(() => {
@@ -73,6 +92,10 @@ export default function SettingsPage() {
     }
 
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    loadDesktopDevices();
   }, []);
 
   async function updateSettings(
@@ -163,6 +186,9 @@ export default function SettingsPage() {
       }
 
       setDesktopToken(data.token);
+
+      await loadDesktopDevices();
+      
       setTokenMessage(
         "Token generated. Copy it and paste it into the FocusTrace Desktop app.",
       );
@@ -179,6 +205,98 @@ export default function SettingsPage() {
       );
     } finally {
       setGeneratingToken(false);
+    }
+  }
+
+  async function loadDesktopDevices() {
+    try {
+      setLoadingDevices(true);
+
+      const response = await fetch(
+        "/api/desktop/pair",
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+          "Could not load desktop devices.",
+        );
+      }
+
+      setDesktopDevices(
+        data.devices ?? [],
+      );
+    } catch (error) {
+      console.error(
+        "Desktop devices error:",
+        error,
+      );
+
+      setDeviceMessage(
+        "Could not load paired desktop devices.",
+      );
+    } finally {
+      setLoadingDevices(false);
+    }
+  }
+
+  async function unpairDesktopDevice(
+    deviceId: string,
+  ) {
+    const confirmed = window.confirm(
+      "Are you sure you want to unpair this desktop device?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setUnpairingDeviceId(deviceId);
+      setDeviceMessage("");
+
+      const response = await fetch(
+        "/api/desktop/pair",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            deviceId,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+          "Could not unpair desktop device.",
+        );
+      }
+
+      setDeviceMessage(
+        "Desktop device unpaired successfully.",
+      );
+
+      await loadDesktopDevices();
+    } catch (error) {
+      console.error(
+        "Desktop unpair error:",
+        error,
+      );
+
+      setDeviceMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not unpair desktop device.",
+      );
+    } finally {
+      setUnpairingDeviceId(null);
     }
   }
 
@@ -415,6 +533,96 @@ export default function SettingsPage() {
           {tokenMessage && (
             <p className="mt-3 text-sm text-slate-500">
               {tokenMessage}
+            </p>
+          )}
+
+        </section>
+
+
+        {/* Desktop Devices */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+
+          <h2 className="text-lg font-semibold text-slate-900">
+            Paired Desktop Devices
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Manage desktop applications connected to your
+            FocusTrace account.
+          </p>
+
+          {loadingDevices ? (
+            <p className="mt-5 text-sm text-slate-500">
+              Loading devices...
+            </p>
+          ) : desktopDevices.length === 0 ? (
+            <div className="mt-5 rounded-xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">
+                No desktop devices are currently paired.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 space-y-3">
+
+              {desktopDevices.map((device) => (
+                <div
+                  key={device.id}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"
+                >
+
+                  <div className="min-w-0">
+
+                    <p className="font-medium text-slate-800">
+                      {device.name || "FocusTrace Desktop"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Paired{" "}
+                      {new Date(
+                        device.createdAt,
+                      ).toLocaleString()}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Last used:{" "}
+                      {device.lastUsedAt
+                        ? new Date(
+                          device.lastUsedAt,
+                        ).toLocaleString()
+                        : "Never"}
+                    </p>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      unpairDesktopDevice(
+                        device.id,
+                      )
+                    }
+                    disabled={
+                      unpairingDeviceId ===
+                      device.id
+                    }
+                    className="shrink-0 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {unpairingDeviceId ===
+                      device.id
+                      ? "Unpairing..."
+                      : "Unpair"}
+                  </button>
+
+                </div>
+              ))}
+
+            </div>
+          )}
+
+          {deviceMessage && (
+            <p className="mt-4 text-sm text-slate-500">
+              {deviceMessage}
             </p>
           )}
 

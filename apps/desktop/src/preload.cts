@@ -16,10 +16,28 @@ contextBridge.exposeInMainWorld("focusTrace", {
     ipcRenderer.invoke("desktop-token:exists"),
 
   clearDesktopToken: () =>
-  ipcRenderer.invoke("desktop-token:clear"),
+    ipcRenderer.invoke("desktop-token:clear"),
 
   getTrackingStatus: () =>
-  ipcRenderer.invoke("tracking:get-status"),
+    ipcRenderer.invoke("tracking:get-status"),
+
+  onDesktopTokenRevoked: (
+    callback: () => void,
+  ) => {
+    ipcRenderer.on(
+      "desktop-token:revoked",
+      callback,
+    );
+
+    return () => {
+      ipcRenderer.removeListener(
+        "desktop-token:revoked",
+        callback,
+      );
+    };
+  },
+
+
 });
 
 console.log("FocusTrace preload loaded");
