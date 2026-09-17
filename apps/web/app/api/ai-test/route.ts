@@ -10,7 +10,7 @@ export async function GET() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    appName: "Visual Studio Code",
+                    application: "Visual Studio Code",
                     windowTitle: "FocusTrace - route.ts",
                 }),
             }
