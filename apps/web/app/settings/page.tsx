@@ -31,6 +31,15 @@ export default function SettingsPage() {
   const [deleteMessage, setDeleteMessage] =
     useState("");
 
+  const [desktopToken, setDesktopToken] =
+    useState("");
+
+  const [generatingToken, setGeneratingToken] =
+    useState(false);
+
+  const [tokenMessage, setTokenMessage] =
+    useState("");
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -125,51 +134,99 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteActivityData() {
-  const confirmed = window.confirm(
-    "Are you sure you want to permanently delete all your tracked activity data? This action cannot be undone.",
-  );
+  async function generateDesktopToken() {
+    try {
+      setGeneratingToken(true);
+      setDesktopToken("");
+      setTokenMessage("");
 
-  if (!confirmed) {
-    return;
+      const response = await fetch(
+        "/api/desktop/pair",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "FocusTrace Desktop",
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+          "Could not generate desktop token.",
+        );
+      }
+
+      setDesktopToken(data.token);
+      setTokenMessage(
+        "Token generated. Copy it and paste it into the FocusTrace Desktop app.",
+      );
+    } catch (error) {
+      console.error(
+        "Desktop token error:",
+        error,
+      );
+
+      setTokenMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not generate desktop token.",
+      );
+    } finally {
+      setGeneratingToken(false);
+    }
   }
 
-  setDeletingData(true);
-  setDeleteMessage("");
-
-  try {
-    const response = await fetch(
-      "/api/settings/privacy/data",
-      {
-        method: "DELETE",
-      },
+  async function handleDeleteActivityData() {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete all your tracked activity data? This action cannot be undone.",
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-          "Failed to delete activity data",
-      );
+    if (!confirmed) {
+      return;
     }
 
-    setDeleteMessage(
-      `Deleted ${data.deletedCount} activity records successfully.`,
-    );
-  } catch (error) {
-    console.error(
-      "Delete activity data error:",
-      error,
-    );
+    setDeletingData(true);
+    setDeleteMessage("");
 
-    setDeleteMessage(
-      "Could not delete activity data.",
-    );
-  } finally {
-    setDeletingData(false);
+    try {
+      const response = await fetch(
+        "/api/settings/privacy/data",
+        {
+          method: "DELETE",
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Failed to delete activity data",
+        );
+      }
+
+      setDeleteMessage(
+        `Deleted ${data.deletedCount} activity records successfully.`,
+      );
+    } catch (error) {
+      console.error(
+        "Delete activity data error:",
+        error,
+      );
+
+      setDeleteMessage(
+        "Could not delete activity data.",
+      );
+    } finally {
+      setDeletingData(false);
+    }
   }
-}
 
   if (loading) {
     return (
@@ -285,6 +342,81 @@ export default function SettingsPage() {
             </div>
 
           </div>
+
+        </section>
+
+
+        {/* Desktop App */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+
+          <h2 className="text-lg font-semibold text-slate-900">
+            Desktop App
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Connect the FocusTrace desktop tracker to your account.
+            The desktop app uses this token to securely send activity
+            data on your behalf.
+          </p>
+
+          <button
+            type="button"
+            onClick={generateDesktopToken}
+            disabled={generatingToken}
+            className="mt-5 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {generatingToken
+              ? "Generating..."
+              : "Generate Desktop Token"}
+          </button>
+
+          {desktopToken && (
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+
+              <p className="text-sm font-semibold text-amber-900">
+                Desktop token
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-amber-700">
+                Copy this token now and paste it into the
+                FocusTrace Desktop app. For security, it will
+                not be shown again after leaving this page.
+              </p>
+
+              <div className="mt-4 flex gap-2">
+                <input
+                  type="text"
+                  value={desktopToken}
+                  readOnly
+                  className="min-w-0 flex-1 rounded-lg border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(
+                      desktopToken,
+                    );
+
+                    setTokenMessage(
+                      "Desktop token copied to clipboard.",
+                    );
+                  }}
+                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Copy
+                </button>
+              </div>
+
+            </div>
+          )}
+
+          {tokenMessage && (
+            <p className="mt-3 text-sm text-slate-500">
+              {tokenMessage}
+            </p>
+          )}
 
         </section>
 

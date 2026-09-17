@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignOutButton } from "../components/AuthButtons";
 
 export default function DashboardLayout({
   children,
@@ -44,6 +45,8 @@ export default function DashboardLayout({
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-700 text-sm font-medium">
                 A
               </div>
+
+              <SignOutButton />
             </div>
           </header>
 
