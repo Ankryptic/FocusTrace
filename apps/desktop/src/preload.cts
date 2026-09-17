@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld("focusTrace", {
   hasDesktopToken: () =>
     ipcRenderer.invoke("desktop-token:exists"),
 
+  clearDesktopToken: () =>
+  ipcRenderer.invoke("desktop-token:clear"),
+
   getTrackingStatus: () =>
   ipcRenderer.invoke("tracking:get-status"),
 });

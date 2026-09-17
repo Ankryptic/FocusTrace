@@ -70,3 +70,75 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        { status: 401 },
+      );
+    }
+
+    const body = await request.json();
+
+    if (
+      typeof body.deviceId !== "string" ||
+      !body.deviceId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Device ID is required",
+        },
+        { status: 400 },
+      );
+    }
+
+    const device = await db.desktopDevice.findFirst({
+      where: {
+        id: body.deviceId,
+        userId: session.user.id,
+      },
+    });
+
+    if (!device) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Desktop device not found",
+        },
+        { status: 404 },
+      );
+    }
+
+    await db.desktopDevice.delete({
+      where: {
+        id: device.id,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Desktop device unpaired.",
+    });
+  } catch (error) {
+    console.error(
+      "Desktop unpair error:",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to unpair desktop device",
+      },
+      { status: 500 },
+    );
+  }
+}

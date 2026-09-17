@@ -8,6 +8,8 @@ const API_URL =
 type ProjectIdGetter =
   () => string | null;
 
+type TokenInvalidHandler = () => void;
+
 type Activity = {
   application: string;
   windowTitle: string | null;
@@ -15,7 +17,10 @@ type Activity = {
   endedAt: Date;
 };
 
-async function isTrackingEnabled(token: string) {
+async function isTrackingEnabled(
+  token: string,
+  onTokenInvalid: TokenInvalidHandler,
+) {
   try {
     const response = await fetch(
       "http://localhost:3000/api/settings/privacy",
@@ -25,6 +30,14 @@ async function isTrackingEnabled(token: string) {
         },
       },
     );
+
+    if (response.status === 401) {
+      console.log("Desktop token is no longer valid.");
+
+      onTokenInvalid();
+
+      return false;
+    }
 
     if (!response.ok) {
       console.error(
@@ -51,6 +64,7 @@ async function isTrackingEnabled(token: string) {
 export function startActivityTracker(
   getProjectId: ProjectIdGetter,
   getToken: () => string | null,
+  onTokenInvalid: TokenInvalidHandler,
 ) {
   let currentActivity: Activity | null =
     null;
@@ -66,7 +80,7 @@ export function startActivityTracker(
         return;
       }
 
-      const trackingEnabled = await isTrackingEnabled(token);
+      const trackingEnabled = await isTrackingEnabled(token, onTokenInvalid);
 
       if (!trackingEnabled) {
         /*
@@ -83,6 +97,7 @@ export function startActivityTracker(
             currentActivity,
             getProjectId(),
             token,
+            onTokenInvalid,
           );
 
           currentActivity = null;
@@ -121,6 +136,7 @@ export function startActivityTracker(
           currentActivity,
           getProjectId(),
           token,
+          onTokenInvalid,
         );
       }
 
@@ -169,6 +185,7 @@ async function saveActivity(
   activity: Activity,
   projectId: string | null,
   token: string,
+  onTokenInvalid: TokenInvalidHandler,
 ) {
   try {
     /*
@@ -213,6 +230,14 @@ async function saveActivity(
         projectId,
       }),
     });
+
+    if (response.status === 401) {
+      console.log("Desktop token was revoked.");
+
+      onTokenInvalid();
+
+      return;
+    }
 
     const data =
       await response.json();

@@ -98,6 +98,16 @@ function getDesktopToken(): string | null {
   }
 }
 
+function clearDesktopToken() {
+  const config = readConfig();
+
+  delete config.desktopToken;
+
+  saveConfig(config);
+
+  console.log("Desktop token cleared.");
+}
+
 async function desktopFetch(
   url: string,
   options: RequestInit = {},
@@ -222,6 +232,25 @@ ipcMain.handle("desktop-token:exists", async () => {
   };
 });
 
+ipcMain.handle("desktop-token:clear", async () => {
+  try {
+    clearDesktopToken();
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error(
+      "Could not clear desktop token:",
+      error,
+    );
+
+    return {
+      success: false,
+      error: "Could not clear desktop token",
+    };
+  }
+});
 
 /*
  * Save selected project
@@ -297,6 +326,11 @@ function start() {
     },
     () => {
       return getDesktopToken();
+    },
+    () => {
+      console.log("Desktop token revoked. Clearing local token.");
+
+      clearDesktopToken();
     },
   );
 }
