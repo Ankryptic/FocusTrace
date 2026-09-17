@@ -158,12 +158,12 @@ export async function GET() {
     const averageConfidence =
       classifiedActivities.length > 0
         ? classifiedActivities.reduce(
-            (total, activity) =>
-              total +
-              (activity.classification
-                ?.confidence ?? 0),
-            0,
-          ) / classifiedActivities.length
+          (total, activity) =>
+            total +
+            (activity.classification
+              ?.confidence ?? 0),
+          0,
+        ) / classifiedActivities.length
         : 0;
 
     /*

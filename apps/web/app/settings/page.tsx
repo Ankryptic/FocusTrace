@@ -373,7 +373,7 @@ export default function SettingsPage() {
       {/* Header */}
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">
+        <h1 className="text-3xl font-bold text-white">
           Settings
         </h1>
 

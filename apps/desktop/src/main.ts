@@ -157,10 +157,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile(
-    path.join(
-      __dirname,
-      "../src/renderer.html",
-    ),
+    path.join(app.getAppPath(), "src", "renderer.html"),
   );
 
   mainWindow.on("closed", () => {
