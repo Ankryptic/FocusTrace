@@ -45,7 +45,7 @@ def classify_activity(
         "mail", "gmail", "outlook",
     ]):
         return {
-            "category": "COMMMUNICATION",
+            "category": "COMMUNICATION",
             "confidence": 0.90,
             "reason": "The application or window appears related to communication.",
         }

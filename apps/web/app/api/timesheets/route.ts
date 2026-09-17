@@ -2,6 +2,26 @@ import { db } from "@focus-trace/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
+import { fromZonedTime } from "date-fns-tz";
+
+
+function getUserDayRange(dateParam: string, timezone: string) {
+    const startOfDay = fromZonedTime(
+        `${dateParam}T00:00:00`,
+        timezone,
+    );
+
+    const endOfDay = fromZonedTime(
+        `${dateParam}T23:59:59.999`,
+        timezone,
+    );
+
+    return {
+        startOfDay,
+        endOfDay,
+    };
+}
+
 
 export async function GET(req: Request) {
     try {
@@ -45,8 +65,14 @@ export async function GET(req: Request) {
             );
         }
 
-        const startOfDay = new Date(`${dateParam}T00:00:00.000Z`);
-        const endOfDay = new Date(`${dateParam}T23:59:59.999Z`);
+        const timezone =
+            searchParams.get("timezone") ||
+            Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        const { startOfDay, endOfDay } = getUserDayRange(
+            dateParam,
+            timezone,
+        );
 
         if (
             Number.isNaN(startOfDay.getTime()) ||
@@ -124,6 +150,11 @@ export async function POST(req: Request) {
 
         const dateParam = body.date;
 
+        const timezone =
+            typeof body.timezone === "string" && body.timezone
+                ? body.timezone
+                : Intl.DateTimeFormat().resolvedOptions().timeZone;
+
         if (!dateParam) {
             return NextResponse.json(
                 {
@@ -144,8 +175,10 @@ export async function POST(req: Request) {
             );
         }
 
-        const startOfDay = new Date(`${dateParam}T00:00:00.000Z`);
-        const endOfDay = new Date(`${dateParam}T23:59:59.999Z`);
+        const { startOfDay, endOfDay } = getUserDayRange(
+            dateParam,
+            timezone,
+        );
 
         if (
             Number.isNaN(startOfDay.getTime()) ||
@@ -223,12 +256,12 @@ export async function POST(req: Request) {
             startTime: Date;
             endTime: Date;
             category:
-                | "DESIGN"
-                | "RESEARCH"
-                | "COMMUNICATION"
-                | "DOCUMENTATION"
-                | "DEVELOPMENT"
-                | "OTHER";
+            | "DESIGN"
+            | "RESEARCH"
+            | "COMMUNICATION"
+            | "DOCUMENTATION"
+            | "DEVELOPMENT"
+            | "OTHER";
             confidence: number;
             reason: string;
             projectId: string | null;
@@ -288,7 +321,7 @@ export async function POST(req: Request) {
                 data: {
                     startTime: group.startTime,
                     endTime: group.endTime,
-                    description: group.reason,
+                    description: `${group.category.charAt(0) + group.category.slice(1).toLowerCase()} activity — ${group.reason}`,
                     category: group.category,
                     confidence: group.confidence,
                     approved: false,

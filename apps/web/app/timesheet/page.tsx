@@ -74,8 +74,18 @@ function formatCategory(category: string) {
   return category.charAt(0) + category.slice(1).toLowerCase();
 }
 
+function getTodayDate() {
+  const today = new Date();
+
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function TimesheetPage() {
-  const [date, setDate] = useState("2026-09-15");
+  const [date, setDate] = useState(getTodayDate());
 
   const [data, setData] = useState<TimesheetResponse | null>(null);
 
@@ -87,13 +97,17 @@ export default function TimesheetPage() {
 
   const [savingId, setSavingId] = useState<string | null>(null);
 
+  const [generating, setGenerating] = useState(false);
+
   async function loadTimesheet(selectedDate: string) {
     try {
       setLoading(true);
       setError("");
 
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
       const response = await fetch(
-        `/api/timesheets?date=${selectedDate}`,
+        `/api/timesheets?date=${selectedDate}&timezone=${encodeURIComponent(timezone)}`,
       );
 
       if (!response.ok) {
@@ -112,6 +126,46 @@ export default function TimesheetPage() {
       setError("Could not load timesheet.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateTimesheet() {
+    try {
+      setGenerating(true);
+      setError("");
+
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      const response = await fetch("/api/timesheets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          date,
+          timezone,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || "Could not generate timesheet",
+        );
+      }
+
+      await loadTimesheet(date);
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not generate timesheet.",
+      );
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -201,6 +255,33 @@ export default function TimesheetPage() {
     (entry) => entry.approved,
   ).length;
 
+
+  const totalSeconds = entries.reduce((total, entry) => {
+    return (
+      total +
+      (new Date(entry.endTime).getTime() -
+        new Date(entry.startTime).getTime()) /
+      1000
+    );
+  }, 0);
+
+  function formatTotalDuration(seconds: number) {
+    const minutes = Math.floor(seconds / 60);
+
+    if (minutes < 1) {
+      return `${Math.floor(seconds)}s`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours === 0) {
+      return `${minutes}m`;
+    }
+
+    return `${hours}h ${remainingMinutes}m`;
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       {/* Header */}
@@ -215,16 +296,29 @@ export default function TimesheetPage() {
           </p>
         </div>
 
-        <input
-          type="date"
-          value={date}
-          onChange={(event) => setDate(event.target.value)}
-          className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white outline-none focus:border-zinc-500"
-        />
+        <div className="flex flex-col gap-3 sm:items-end">
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white outline-none focus:border-zinc-500"
+          />
+
+          <button
+            type="button"
+            onClick={generateTimesheet}
+            disabled={generating}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {generating
+              ? "Generating..."
+              : "Generate Timesheet"}
+          </button>
+        </div>
       </section>
 
       {/* Summary */}
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <p className="text-sm text-zinc-400">Total Entries</p>
 
@@ -246,6 +340,14 @@ export default function TimesheetPage() {
 
           <p className="mt-2 text-2xl font-bold">
             {approvedCount}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="text-sm text-zinc-400">Tracked Time</p>
+
+          <p className="mt-2 text-2xl font-bold">
+            {formatTotalDuration(totalSeconds)}
           </p>
         </div>
       </section>
@@ -288,6 +390,19 @@ export default function TimesheetPage() {
   );
 }
 
+function formatDateTimeLocal(dateString: string) {
+  const date = new Date(dateString);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+}
+
 function TimesheetEntryCard({
   entry,
   editing,
@@ -311,15 +426,23 @@ function TimesheetEntryCard({
   const [category, setCategory] = useState(entry.category);
 
   const [startTime, setStartTime] = useState(
-    new Date(entry.startTime).toISOString().slice(0, 16),
+    formatDateTimeLocal(entry.startTime),
   );
 
   const [endTime, setEndTime] = useState(
-    new Date(entry.endTime).toISOString().slice(0, 16),
+    formatDateTimeLocal(entry.endTime),
   );
 
   async function saveChanges() {
     try {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+
+      if (end <= start) {
+        alert("End time must be after start time.");
+        return;
+      }
+
       const response = await fetch(
         `/api/timesheets/entries/${entry.id}`,
         {
@@ -370,11 +493,10 @@ function TimesheetEntryCard({
                 </h4>
 
                 <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                    entry.approved
-                      ? "bg-zinc-700 text-zinc-200"
-                      : "bg-white text-black"
-                  }`}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${entry.approved
+                    ? "bg-zinc-700 text-zinc-200"
+                    : "bg-white text-black"
+                    }`}
                 >
                   {entry.approved ? "Approved" : "Needs review"}
                 </span>
@@ -474,6 +596,7 @@ function TimesheetEntryCard({
 
               <input
                 type="datetime-local"
+                step="1"
                 value={startTime}
                 onChange={(event) =>
                   setStartTime(event.target.value)
@@ -489,6 +612,7 @@ function TimesheetEntryCard({
 
               <input
                 type="datetime-local"
+                step="1"
                 value={endTime}
                 onChange={(event) =>
                   setEndTime(event.target.value)
