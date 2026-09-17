@@ -173,7 +173,7 @@ export async function POST(req: Request) {
         // Ask AI service to classify the activity
         try {
             const aiResponse = await fetch(
-                "http://127.0.0.1:8000/classify",
+                `${process.env.AI_SERVICE_URL}/classify`,
                 {
                     method: "POST",
                     headers: {
