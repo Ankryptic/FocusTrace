@@ -7,50 +7,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ActivityCategory {
-  DESIGN
-  RESEARCH
-  COMMUNICATION
-  DOCUMENTATION
-  DEVELOPMENT
-  OTHER
-}
-
 model User {
-  id            String    @id @default(uuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  accounts Account[]
-  sessions Session[]
-
-  projects        Project[]
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  name            String?
+  email           String?          @unique
+  image           String?
+  emailVerified   DateTime?
+  accounts        Account[]
   activities      Activity[]
-  timesheets      Timesheet[]
+  desktopDevices  DesktopDevice[]
   privacySettings PrivacySettings?
-
-  desktopDevices DesktopDevice[]
+  projects        Project[]
+  sessions        Session[]
+  timesheets      Timesheet[]
 }
 
 model Account {
-  id                String @id @default(uuid())
+  id                String  @id @default(uuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-
-  refresh_token String?
-  access_token  String?
-  expires_at    Int?
-  token_type    String?
-  scope         String?
-  id_token      String?
-  session_state String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -61,8 +48,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -76,35 +62,30 @@ model VerificationToken {
 }
 
 model Project {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id               String           @id @default(uuid())
+  name             String
+  description      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  userId           String
   activities       Activity[]
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   timesheetEntries TimesheetEntry[]
 
   @@index([userId])
 }
 
 model Activity {
-  id          String   @id @default(uuid())
-  application String
-  windowTitle String?
-  startedAt   DateTime
-  endedAt     DateTime
-  duration    Int
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
+  id             String                  @id @default(uuid())
+  application    String
+  windowTitle    String?
+  startedAt      DateTime
+  endedAt        DateTime
+  duration       Int
+  userId         String
+  projectId      String?
+  project        Project?                @relation(fields: [projectId], references: [id])
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   classification ActivityClassification?
 
   @@index([userId])
@@ -118,21 +99,18 @@ model ActivityClassification {
   confidence Float
   reason     String?
   createdAt  DateTime         @default(now())
-
-  activityId String   @unique
-  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId String           @unique
+  activity   Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
 }
 
 model Timesheet {
-  id        String   @id @default(uuid())
+  id        String           @id @default(uuid())
   date      DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  entries TimesheetEntry[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries   TimesheetEntry[]
 
   @@index([userId, date])
 }
@@ -145,12 +123,10 @@ model TimesheetEntry {
   category    ActivityCategory
   confidence  Float?
   approved    Boolean          @default(false)
-
   timesheetId String
-  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
-
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  project     Project?         @relation(fields: [projectId], references: [id])
+  timesheet   Timesheet        @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
 
   @@index([timesheetId])
   @@index([projectId])
@@ -161,9 +137,8 @@ model PrivacySettings {
   trackingEnabled Boolean  @default(false)
   retentionDays   Int      @default(30)
   updatedAt       DateTime @updatedAt
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DesktopDevice {
@@ -172,9 +147,17 @@ model DesktopDevice {
   tokenHash  String    @unique
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum ActivityCategory {
+  DESIGN
+  RESEARCH
+  COMMUNICATION
+  DOCUMENTATION
+  DEVELOPMENT
+  OTHER
 }
