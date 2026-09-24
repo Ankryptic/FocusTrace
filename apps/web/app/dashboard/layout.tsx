@@ -22,7 +22,6 @@ export default function DashboardLayout({
             <NavItem href="/timesheet" label="Timesheet" icon="🕒" />
             <NavItem href="/projects" label="Projects" icon="📁" />
             <NavItem href="/analytics" label="Analytics" icon="📈" />
-            <NavItem href="/settings" label="Settings" icon="⚙️" />
           </nav>
         </aside>
 

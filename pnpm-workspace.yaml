@@ -5,8 +5,6 @@ packages:
 allowBuilds:
   '@prisma/client': false
   '@prisma/engines': false
-  electron: false
-  electron-winstaller: true
   esbuild: false
   get-windows: false
   prisma: false
