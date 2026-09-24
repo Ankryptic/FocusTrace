@@ -8,20 +8,26 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(uuid())
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  name            String?
-  email           String?          @unique
-  image           String?
-  emailVerified   DateTime?
-  accounts        Account[]
-  activities      Activity[]
-  desktopDevices  DesktopDevice[]
-  privacySettings PrivacySettings?
-  projects        Project[]
-  sessions        Session[]
-  timesheets      Timesheet[]
+  id               String           @id @default(uuid())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  name             String?
+  email            String?          @unique
+  image            String?
+  emailVerified    DateTime?
+
+  role             UserRole         @default(EMPLOYEE)
+
+  accounts         Account[]
+  activities       Activity[]
+  desktopDevices   DesktopDevice[]
+  desktopAuthCodes DesktopAuthCode[]
+  privacySettings  PrivacySettings?
+  projects         Project[]
+  sessions         Session[]
+  timesheets       Timesheet[]
+  activityEvents   ActivityEvent[]
+  screenshots      Screenshot[]
 }
 
 model Account {
@@ -93,6 +99,25 @@ model Activity {
   @@index([startedAt])
 }
 
+model ActivityEvent {
+  id        String            @id @default(uuid())
+  userId    String
+  deviceId  String?
+  type      ActivityEventType
+  timestamp DateTime          @default(now())
+
+  mouseDistance Int?
+  mouseClicks   Int?
+  keyPresses    Int?
+
+  metadata Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([timestamp])
+}
+
 model ActivityClassification {
   id         String           @id @default(uuid())
   category   ActivityCategory
@@ -101,6 +126,21 @@ model ActivityClassification {
   createdAt  DateTime         @default(now())
   activityId String           @unique
   activity   Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+}
+
+model Screenshot {
+  id          String   @id @default(uuid())
+  userId      String
+  deviceId    String?
+  storageKey  String
+  application String?
+  website     String?
+  capturedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([capturedAt])
 }
 
 model Timesheet {
@@ -133,12 +173,14 @@ model TimesheetEntry {
 }
 
 model PrivacySettings {
-  id              String   @id @default(uuid())
-  trackingEnabled Boolean  @default(false)
-  retentionDays   Int      @default(30)
-  updatedAt       DateTime @updatedAt
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String   @id @default(uuid())
+  trackingEnabled          Boolean  @default(true)
+  retentionDays            Int      @default(30)
+  inactivityTimeoutMinutes Int      @default(30)
+  screenshotIntervalMinutes Int @default(5)
+  updatedAt                DateTime @updatedAt
+  userId                   String   @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DesktopDevice {
@@ -153,6 +195,25 @@ model DesktopDevice {
   @@index([userId])
 }
 
+model DesktopAuthCode {
+  id         String   @id @default(uuid())
+  codeHash   String   @unique
+  userId     String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum UserRole {
+  EMPLOYEE
+  HR
+}
+
 enum ActivityCategory {
   DESIGN
   RESEARCH
@@ -160,4 +221,10 @@ enum ActivityCategory {
   DOCUMENTATION
   DEVELOPMENT
   OTHER
+}
+
+enum ActivityEventType {
+  MOUSE
+  KEYBOARD
+  ACTIVE_WINDOW
 }

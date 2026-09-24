@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
 import { getDesktopUserId } from "@/lib/desktop-auth";
+import { requireHR } from "@/lib/require-hr";
 
 async function getAuthenticatedUserId(request: Request) {
     // Try Electron desktop token first
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
             settings = await db.privacySettings.create({
                 data: {
                     userId,
-                    trackingEnabled: false,
+                    trackingEnabled: true,
                     retentionDays: 30,
                 },
             });
@@ -68,23 +69,26 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
-        const userId = await getAuthenticatedUserId(request);
+        const hr = await requireHR();
 
-        if (!userId) {
+        if (!hr.authorized) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Unauthorized",
+                    error: hr.error,
                 },
-                { status: 401 },
+                { status: hr.status },
             );
         }
+
+        const userId = hr.user.id;
 
         const body = await request.json();
 
         const data: {
             trackingEnabled?: boolean;
             retentionDays?: number;
+            inactivityTimeoutMinutes?: number;
         } = {};
 
         if (body.trackingEnabled !== undefined) {
@@ -119,6 +123,25 @@ export async function PATCH(request: Request) {
             data.retentionDays = body.retentionDays;
         }
 
+        if (body.inactivityTimeoutMinutes !== undefined) {
+            if (
+                !Number.isInteger(body.inactivityTimeoutMinutes) ||
+                body.inactivityTimeoutMinutes < 1 ||
+                body.inactivityTimeoutMinutes > 480
+            ) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error:
+                            "inactivityTimeoutMinutes must be an integer between 1 and 480",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            data.inactivityTimeoutMinutes = body.inactivityTimeoutMinutes;
+        }
+
         if (Object.keys(data).length === 0) {
             return NextResponse.json(
                 {
@@ -136,8 +159,10 @@ export async function PATCH(request: Request) {
             update: data,
             create: {
                 userId,
-                trackingEnabled: data.trackingEnabled ?? false,
+                trackingEnabled: data.trackingEnabled ?? true,
                 retentionDays: data.retentionDays ?? 30,
+                inactivityTimeoutMinutes:
+                    data.inactivityTimeoutMinutes ?? 30,
             },
         });
 

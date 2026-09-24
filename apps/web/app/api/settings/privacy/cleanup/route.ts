@@ -1,4 +1,4 @@
-import { cleanupExpiredActivities } from "@/lib/retention";
+import { cleanupExpiredActivities, cleanupExpiredScreenshots } from "@/lib/retention";
 import { NextResponse } from "next/server";
 
 async function cleanup(request: Request) {
@@ -37,12 +37,16 @@ async function cleanup(request: Request) {
       );
     }
 
-    const result =
+    const activityResult =
       await cleanupExpiredActivities();
+
+    const screenshotResult =
+      await cleanupExpiredScreenshots();
 
     return NextResponse.json({
       success: true,
-      ...result,
+      activities: activityResult,
+      screenshots: screenshotResult,
     });
   } catch (error) {
     console.error(
