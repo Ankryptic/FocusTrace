@@ -40,7 +40,9 @@ public class Worker : BackgroundService
 
         _webAppUrl =
             configuration["WebAppUrl"]
-            ?? "http://localhost:3000";
+            ?? throw new InvalidOperationException(
+                "WebAppUrl is not configured."
+            );
 
         _logger.LogInformation(
             "FocusTrace server URL: {WebAppUrl}",
@@ -408,22 +410,19 @@ public class Worker : BackgroundService
     }
 
     private void UpdateStatus(
-        bool connected,
-        bool trackingEnabled,
-        string message)
+    bool isConnected,
+    bool isTrackingEnabled,
+    string message)
     {
-        lock (_stateLock)
-        {
-            IsConnected = connected;
-            IsTrackingEnabled = trackingEnabled;
-            ConnectionMessage = message;
-        }
+        IsConnected = isConnected;
+        IsTrackingEnabled = isTrackingEnabled;
+        ConnectionMessage = message;
 
         StatusChanged?.Invoke(
             this,
             new AgentStatusChangedEventArgs(
-                connected,
-                trackingEnabled,
+                isConnected,
+                isTrackingEnabled,
                 message
             )
         );
@@ -681,13 +680,11 @@ public class Worker : BackgroundService
                     {
                         trackingEnabled = latestStatus.TrackingEnabled;
 
-                        IsTrackingEnabled = trackingEnabled;
-
                         UpdateStatus(
                             true,
                             trackingEnabled,
                             trackingEnabled
-                                ? "Connected"
+                                ? "Connected — tracking enabled"
                                 : "Connected — tracking disabled by HR"
                         );
 

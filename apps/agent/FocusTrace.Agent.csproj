@@ -10,8 +10,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <SystemDrawingEnable>true</SystemDrawingEnable>
 
-    <ApplicationIcon>FocusTrace.ico</ApplicationIcon>
-
     <UserSecretsId>dotnet-FocusTrace.Agent-8746d135-a8b9-4b81-989c-3514ce6347c3</UserSecretsId>
   </PropertyGroup>
 
@@ -25,6 +23,10 @@
     <Page Update="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
