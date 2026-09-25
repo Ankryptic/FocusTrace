@@ -49,3 +49,6 @@ __pycache__/
 apps/agent/bin/
 apps/agent/obj/
 apps/agent/publish/
+
+# FocusTrace release artifacts
+apps/agent/FocusTrace-Agent-win-x64.zip
