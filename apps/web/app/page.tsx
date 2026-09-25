@@ -7,6 +7,10 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
 
   if (session?.user) {
+    if (session.user.role === "HR") {
+      redirect("/hr");
+    }
+
     redirect("/dashboard");
   }
 

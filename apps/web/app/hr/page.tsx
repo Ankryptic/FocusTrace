@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SignOutButton } from "@/app/components/AuthButtons";
 
 type Employee = {
     id: string;
@@ -37,6 +38,26 @@ type Screenshot = {
     capturedAt: string;
 };
 
+type TimesheetEntry = {
+    id: string;
+    startTime: string;
+    endTime: string;
+    description: string;
+    category: string;
+    confidence: number | null;
+};
+
+type EmployeeTimesheet = {
+    id: string;
+    date: string;
+    createdAt: string;
+};
+
+type TimesheetData = {
+    timesheet: EmployeeTimesheet | null;
+    entries: TimesheetEntry[];
+};
+
 export default function HRDashboard() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [selectedEmployee, setSelectedEmployee] =
@@ -56,6 +77,15 @@ export default function HRDashboard() {
     const [screenshots, setScreenshots] =
         useState<Screenshot[]>([]);
 
+    const [screenshotUrls, setScreenshotUrls] =
+        useState<Record<string, string>>({});
+
+    const [loadingScreenshot, setLoadingScreenshot] =
+        useState<string | null>(null);
+
+    const [selectedScreenshot, setSelectedScreenshot] =
+        useState<Screenshot | null>(null);
+
     const [selectedDate, setSelectedDate] =
         useState(() => {
             const now = new Date();
@@ -69,6 +99,15 @@ export default function HRDashboard() {
 
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState("");
+
+    const [timesheetData, setTimesheetData] =
+        useState<TimesheetData>({
+            timesheet: null,
+            entries: [],
+        });
+
+    const [timesheetLoading, setTimesheetLoading] =
+        useState(false);
 
     useEffect(() => {
         loadEmployees();
@@ -132,6 +171,40 @@ export default function HRDashboard() {
         }
     }
 
+    async function loadScreenshotUrl(screenshotId: string) {
+        if (screenshotUrls[screenshotId]) {
+            return screenshotUrls[screenshotId];
+        }
+
+        setLoadingScreenshot(screenshotId);
+
+        try {
+            const response = await fetch(
+                `/api/hr/screenshots/${screenshotId}/url`
+            );
+
+            const data = await response.json();
+
+            if (!response.ok || !data.url) {
+                throw new Error(
+                    data.error || "Failed to load screenshot"
+                );
+            }
+
+            setScreenshotUrls((current) => ({
+                ...current,
+                [screenshotId]: data.url,
+            }));
+
+            return data.url;
+        } catch (error) {
+            console.error(error);
+            return null;
+        } finally {
+            setLoadingScreenshot(null);
+        }
+    }
+
     function selectEmployee(employee: Employee) {
         setSelectedEmployee(employee);
 
@@ -156,15 +229,23 @@ export default function HRDashboard() {
             employee.id,
             selectedDate,
         );
+
+        loadTimesheet(
+            employee.id,
+            selectedDate,
+        );
     }
 
-    function handleDateChange(
-        date: string,
-    ) {
+    function handleDateChange(date: string) {
         setSelectedDate(date);
 
         if (selectedEmployee) {
             loadActivity(
+                selectedEmployee.id,
+                date,
+            );
+
+            loadTimesheet(
                 selectedEmployee.id,
                 date,
             );
@@ -219,6 +300,49 @@ export default function HRDashboard() {
             );
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function loadTimesheet(
+        employeeId: string,
+        date = selectedDate,
+    ) {
+        setTimesheetLoading(true);
+
+        try {
+            const timezone =
+                Intl.DateTimeFormat().resolvedOptions()
+                    .timeZone;
+
+            const response = await fetch(
+                `/api/hr/employees/${employeeId}/timesheet?date=${date}&timezone=${encodeURIComponent(
+                    timezone,
+                )}`,
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Failed to load timesheet",
+                );
+            }
+
+            const data = await response.json();
+
+            setTimesheetData({
+                timesheet:
+                    data.timesheet ?? null,
+                entries:
+                    data.entries ?? [],
+            });
+        } catch (error) {
+            console.error(error);
+
+            setTimesheetData({
+                timesheet: null,
+                entries: [],
+            });
+        } finally {
+            setTimesheetLoading(false);
         }
     }
 
@@ -310,16 +434,19 @@ export default function HRDashboard() {
 
     return (
         <main className="min-h-screen bg-gray-50 p-8">
-            <div className="mx-auto max-w-7xl">
-                <header>
-                    <h1 className="text-3xl font-bold">
-                        FocusTrace HR Dashboard
-                    </h1>
+            <div className="mx-auto max-w-7xl ">
+                <header className="w-full flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold">
+                            FocusTrace HR Dashboard
+                        </h1>
 
-                    <p className="mt-2 text-gray-600">
-                        Monitor employee activity and
-                        manage tracking settings.
-                    </p>
+                        <p className="mt-2 text-gray-600">
+                            Monitor employee activity and
+                            manage tracking settings.
+                        </p>
+                    </div>
+                    <SignOutButton />
                 </header>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -580,6 +707,125 @@ export default function HRDashboard() {
                             </div>
                         )}
                     </section>
+
+                    {/* Timesheet */}
+                    <section className="mt-6 rounded-xl bg-white p-6 shadow">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-semibold">
+                                    Timesheet
+                                </h2>
+
+                                <p className="mt-1 text-sm text-gray-500">
+                                    Automatically generated from
+                                    tracked activity.
+                                </p>
+                            </div>
+
+                            {timesheetData.entries.length > 0 && (
+                                <div className="rounded-lg bg-gray-100 px-4 py-2 text-sm">
+                                    {timesheetData.entries.length} active
+                                    periods
+                                </div>
+                            )}
+                        </div>
+
+                        {timesheetLoading ? (
+                            <p className="mt-6 text-gray-500">
+                                Loading timesheet...
+                            </p>
+                        ) : !selectedEmployee ? (
+                            <p className="mt-6 text-gray-500">
+                                Select an employee to view their
+                                timesheet.
+                            </p>
+                        ) : timesheetData.entries.length === 0 ? (
+                            <div className="mt-6 rounded-lg border border-gray-200 p-8 text-center">
+                                <p className="text-gray-500">
+                                    No automatically generated
+                                    timesheet entries for this date.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="mt-6 space-y-3">
+                                {timesheetData.entries.map(
+                                    (entry, index) => {
+                                        const start =
+                                            new Date(
+                                                entry.startTime,
+                                            );
+
+                                        const end =
+                                            new Date(
+                                                entry.endTime,
+                                            );
+
+                                        const duration =
+                                            Math.round(
+                                                (end.getTime() -
+                                                    start.getTime()) /
+                                                60000,
+                                            );
+
+                                        return (
+                                            <div
+                                                key={entry.id}
+                                                className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                            >
+                                                <div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs">
+                                                            {index + 1}
+                                                        </span>
+
+                                                        <p className="font-medium">
+                                                            {start.toLocaleTimeString(
+                                                                [],
+                                                                {
+                                                                    hour: "2-digit",
+                                                                    minute: "2-digit",
+                                                                },
+                                                            )}
+                                                            {" — "}
+                                                            {end.toLocaleTimeString(
+                                                                [],
+                                                                {
+                                                                    hour: "2-digit",
+                                                                    minute: "2-digit",
+                                                                },
+                                                            )}
+                                                        </p>
+                                                    </div>
+
+                                                    <p className="mt-1 ml-10 text-sm text-gray-500">
+                                                        {duration} minutes
+                                                    </p>
+                                                </div>
+
+                                                <div className="flex flex-col items-start gap-2 sm:items-end">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                                                            {entry.category}
+                                                        </span>
+
+                                                        <span className="rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                                                            Automatic
+                                                        </span>
+                                                    </div>
+
+                                                    {entry.description && (
+                                                        <p className="text-sm text-gray-600">
+                                                            {entry.description}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    },
+                                )}
+                            </div>
+                        )}
+                    </section>
                 </div>
 
                 {/* Activity timeline */}
@@ -697,53 +943,108 @@ export default function HRDashboard() {
                             </p>
                         ) : (
                             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                                {screenshots.map(
-                                    (
-                                        screenshot,
-                                    ) => (
+                                {screenshots.map((screenshot) => {
+                                    const imageUrl = screenshotUrls[screenshot.id];
+
+                                    return (
                                         <div
-                                            key={
-                                                screenshot.id
-                                            }
-                                            className="rounded-lg border p-4"
+                                            key={screenshot.id}
+                                            className="overflow-hidden rounded-lg border bg-white"
                                         >
-                                            <div className="text-3xl">
-                                                📸
-                                            </div>
-
-                                            <p className="mt-3 font-medium">
-                                                {
-                                                    screenshot.application
-                                                }
-                                            </p>
-
-                                            {screenshot.website && (
-                                                <p className="text-sm text-gray-500">
-                                                    {
-                                                        screenshot.website
-                                                    }
-                                                </p>
+                                            {imageUrl ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedScreenshot(screenshot)}
+                                                    className="block w-full cursor-zoom-in"
+                                                >
+                                                    <img
+                                                        src={imageUrl}
+                                                        alt={`Screenshot captured at ${formatTime(
+                                                            screenshot.capturedAt
+                                                        )}`}
+                                                        className="aspect-video w-full object-cover"
+                                                    />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadScreenshotUrl(screenshot.id)}
+                                                    disabled={loadingScreenshot === screenshot.id}
+                                                    className="flex aspect-video w-full items-center justify-center bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-50"
+                                                >
+                                                    {loadingScreenshot === screenshot.id
+                                                        ? "Loading..."
+                                                        : "📸 View Screenshot"}
+                                                </button>
                                             )}
 
-                                            <p className="mt-2 text-xs text-gray-400">
-                                                {formatTime(
-                                                    screenshot.capturedAt,
-                                                )}
-                                            </p>
+                                            <div className="p-4">
+                                                <p className="font-medium">
+                                                    {screenshot.application ||
+                                                        "Unknown application"}
+                                                </p>
 
-                                            <p className="mt-2 truncate text-xs text-gray-400">
-                                                {
-                                                    screenshot.storageKey
-                                                }
-                                            </p>
+                                                {screenshot.website && (
+                                                    <p className="text-sm text-gray-500">
+                                                        {screenshot.website}
+                                                    </p>
+                                                )}
+
+                                                <p className="mt-2 text-xs text-gray-400">
+                                                    {formatTime(screenshot.capturedAt)}
+                                                </p>
+                                            </div>
                                         </div>
-                                    ),
-                                )}
+                                    );
+                                })}
                             </div>
                         )}
                     </section>
                 )}
             </div>
+
+            {selectedScreenshot &&
+                screenshotUrls[selectedScreenshot.id] && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+                        onClick={() => setSelectedScreenshot(null)}
+                    >
+                        <div
+                            className="relative max-h-[95vh] max-w-[95vw]"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setSelectedScreenshot(null)}
+                                className="absolute right-2 top-2 z-10 rounded-full bg-black/70 px-3 py-1 text-xl text-white hover:bg-black"
+                            >
+                                ×
+                            </button>
+
+                            <img
+                                src={screenshotUrls[selectedScreenshot.id]}
+                                alt={`Screenshot captured at ${formatTime(
+                                    selectedScreenshot.capturedAt
+                                )}`}
+                                className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+                            />
+
+                            <div className="mt-2 text-center text-sm text-white">
+                                {selectedScreenshot.application || "Unknown application"}
+
+                                {selectedScreenshot.website && (
+                                    <> · {selectedScreenshot.website}</>
+                                )}
+
+                                {" · "}
+                                {formatTime(selectedScreenshot.capturedAt)}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
         </main>
     );
+
+
 }

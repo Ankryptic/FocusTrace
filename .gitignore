@@ -44,3 +44,8 @@ yarn-error.log*
 .venv/
 __pycache__/
 *.pyc
+
+# .NET build outputs
+apps/agent/bin/
+apps/agent/obj/
+apps/agent/publish/

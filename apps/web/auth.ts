@@ -22,10 +22,13 @@ export const authOptions = {
     async session({ session, user }: any) {
       if (session.user) {
         session.user.id = user.id;
+        session.user.role = user.role;
       }
 
+      console.log("SESSION ROLE:", session.user.role);
+
       return session;
-    },
+    }
   },
 };
 

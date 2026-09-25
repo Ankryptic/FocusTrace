@@ -13,11 +13,22 @@ public class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly HttpClient _httpClient = new();
 
-    private const string WebAppUrl = "http://localhost:3000";
+    private readonly string _webAppUrl;
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(
+    ILogger<Worker> logger,
+    IConfiguration configuration)
     {
         _logger = logger;
+
+        _webAppUrl =
+            configuration["_webAppUrl"]
+            ?? "http://localhost:3000";
+
+        _logger.LogInformation(
+    "FocusTrace server URL: {WebAppUrl}",
+    _webAppUrl
+);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -97,7 +108,7 @@ public class Worker : BackgroundService
             $"http://127.0.0.1:{port}/callback/";
 
         var authorizeUrl =
-            $"{WebAppUrl}/desktop/authorize" +
+            $"{_webAppUrl}/desktop/authorize" +
             $"?callback={Uri.EscapeDataString(callbackUrl)}";
 
         _logger.LogInformation(
@@ -238,7 +249,7 @@ public class Worker : BackgroundService
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
-                $"{WebAppUrl}/api/desktop/status"
+                $"{_webAppUrl}/api/desktop/status"
             );
 
             request.Headers.Authorization =
@@ -279,6 +290,12 @@ public class Worker : BackgroundService
 
             return result;
         }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal application shutdown.
+            return null;
+        }
         catch (Exception ex)
         {
             _logger.LogError(
@@ -297,7 +314,7 @@ public class Worker : BackgroundService
         try
         {
             var response = await _httpClient.PostAsJsonAsync(
-                $"{WebAppUrl}/api/desktop/exchange",
+                $"{_webAppUrl}/api/desktop/exchange",
                 new
                 {
                     code
@@ -746,7 +763,7 @@ public class Worker : BackgroundService
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{WebAppUrl}/api/desktop/screenshots/upload"
+                $"{_webAppUrl}/api/desktop/screenshots/upload"
             );
 
             request.Headers.Authorization =
@@ -757,10 +774,19 @@ public class Worker : BackgroundService
 
             request.Content = content;
 
-            var response = await _httpClient.SendAsync(
-                request,
+            using var response = await SendWithRetry(
+                () => _httpClient.SendAsync(request, cancellationToken),
                 cancellationToken
             );
+
+            if (response is null)
+            {
+                _logger.LogWarning(
+                    "Screenshot upload unavailable. Will retry on the next screenshot cycle."
+                );
+
+                return false;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -801,6 +827,63 @@ public class Worker : BackgroundService
 
             return false;
         }
+    }
+
+    private async Task<HttpResponseMessage?> SendWithRetry(
+    Func<Task<HttpResponseMessage>> send,
+    CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                var response = await send();
+
+                // Server responded — don't retry HTTP errors here.
+                return response;
+            }
+            catch (HttpRequestException ex)
+                when (attempt < maxAttempts &&
+                      !cancellationToken.IsCancellationRequested)
+            {
+                var delaySeconds = attempt * 2;
+
+                _logger.LogWarning(
+                    ex,
+                    "Network error. Retrying in {Delay}s ({Attempt}/{MaxAttempts})",
+                    delaySeconds,
+                    attempt,
+                    maxAttempts
+                );
+
+                await Task.Delay(
+                    TimeSpan.FromSeconds(delaySeconds),
+                    cancellationToken
+                );
+            }
+            catch (TaskCanceledException)
+                when (!cancellationToken.IsCancellationRequested &&
+                      attempt < maxAttempts)
+            {
+                var delaySeconds = attempt * 2;
+
+                _logger.LogWarning(
+                    "Request timed out. Retrying in {Delay}s ({Attempt}/{MaxAttempts})",
+                    delaySeconds,
+                    attempt,
+                    maxAttempts
+                );
+
+                await Task.Delay(
+                    TimeSpan.FromSeconds(delaySeconds),
+                    cancellationToken
+                );
+            }
+        }
+
+        return null;
     }
 
     private async Task<bool> SendActivityBatch(
@@ -844,7 +927,7 @@ public class Worker : BackgroundService
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{WebAppUrl}/api/desktop/activity"
+                $"{_webAppUrl}/api/desktop/activity"
             );
 
             request.Headers.Authorization =
@@ -858,10 +941,19 @@ public class Worker : BackgroundService
                 events
             });
 
-            using var response = await _httpClient.SendAsync(
-                request,
+            using var response = await SendWithRetry(
+                () => _httpClient.SendAsync(request, cancellationToken),
                 cancellationToken
             );
+
+            if (response is null)
+            {
+                _logger.LogWarning(
+                    "Activity upload unavailable. Counters will be retried on the next cycle."
+                );
+
+                return false;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -911,7 +1003,7 @@ public class Worker : BackgroundService
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{WebAppUrl}/api/desktop/activity"
+                $"{_webAppUrl}/api/desktop/activity"
             );
 
             request.Headers.Authorization =
@@ -960,6 +1052,10 @@ public class Worker : BackgroundService
                 activeWindow.WindowTitle
             );
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown. Do not log as an error.
+        }
         catch (Exception ex)
         {
             _logger.LogError(
@@ -979,7 +1075,7 @@ public class Worker : BackgroundService
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{WebAppUrl}/api/desktop/activity"
+                $"{_webAppUrl}/api/desktop/activity"
             );
 
             request.Headers.Authorization =
@@ -1028,11 +1124,15 @@ public class Worker : BackgroundService
                 browserUrl.Domain
             );
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown. Do not log as an error.
+        }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Error uploading browser event."
+                "Error uploading active window event."
             );
         }
     }

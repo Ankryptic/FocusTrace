@@ -152,6 +152,7 @@ model Timesheet {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   entries   TimesheetEntry[]
 
+  @@unique([userId, date])
   @@index([userId, date])
 }
 

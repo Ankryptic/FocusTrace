@@ -1,8 +1,7 @@
 import { db } from "@focus-trace/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/auth";
 import { fromZonedTime } from "date-fns-tz";
+import { requireHR } from "@/lib/require-hr";
 
 function getUserDayRange(
     dateParam: string,
@@ -24,36 +23,39 @@ function getUserDayRange(
     };
 }
 
-function validateDate(dateParam: string | null) {
-    return Boolean(
-        dateParam &&
-        /^\d{4}-\d{2}-\d{2}$/.test(dateParam),
-    );
-}
-
-export async function GET(req: Request) {
+export async function GET(
+    req: Request,
+    {
+        params,
+    }: {
+        params: Promise<{ userId: string }>;
+    },
+) {
     try {
-        const session =
-            await getServerSession(authOptions);
+        const hr = await requireHR();
 
-        if (!session?.user?.id) {
+        if (!hr.authorized) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Unauthorized",
+                    error: hr.error,
                 },
-                { status: 401 },
+                { status: hr.status },
             );
         }
 
-        const userId = session.user.id;
+        const { userId } = await params;
 
-        const { searchParams } = new URL(req.url);
+        const { searchParams } =
+            new URL(req.url);
 
         const dateParam =
             searchParams.get("date");
 
-        if (!validateDate(dateParam)) {
+        if (
+            !dateParam ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+        ) {
             return NextResponse.json(
                 {
                     success: false,
@@ -72,18 +74,39 @@ export async function GET(req: Request) {
             startOfDay,
             endOfDay,
         } = getUserDayRange(
-            dateParam!,
+            dateParam,
             timezone,
         );
 
-        if (
-            Number.isNaN(startOfDay.getTime()) ||
-            Number.isNaN(endOfDay.getTime())
-        ) {
+        const employee =
+            await db.user.findUnique({
+                where: {
+                    id: userId,
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                },
+            });
+
+        if (!employee) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Invalid Date",
+                    error: "Employee not found",
+                },
+                { status: 404 },
+            );
+        }
+
+        if (employee.role !== "EMPLOYEE") {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error:
+                        "Selected user is not an employee",
                 },
                 { status: 400 },
             );
@@ -109,6 +132,7 @@ export async function GET(req: Request) {
         if (!timesheet) {
             return NextResponse.json({
                 success: true,
+                employee,
                 timesheet: null,
                 entries: [],
             });
@@ -116,15 +140,17 @@ export async function GET(req: Request) {
 
         return NextResponse.json({
             success: true,
+            employee,
             timesheet: {
                 id: timesheet.id,
                 date: timesheet.date,
+                createdAt: timesheet.createdAt,
             },
             entries: timesheet.entries,
         });
     } catch (error) {
         console.error(
-            "Get timesheet error:",
+            "HR timesheet error:",
             error,
         );
 
@@ -132,27 +158,9 @@ export async function GET(req: Request) {
             {
                 success: false,
                 error:
-                    "Could not fetch timesheet.",
+                    "Could not fetch employee timesheet.",
             },
             { status: 500 },
         );
     }
-}
-
-/**
- * Timesheets are generated automatically from
- * ActivityEvent data.
- *
- * Manual generation is intentionally not supported
- * through this employee endpoint.
- */
-export async function POST() {
-    return NextResponse.json(
-        {
-            success: false,
-            error:
-                "Timesheets are generated automatically from tracked activity.",
-        },
-        { status: 405 },
-    );
 }

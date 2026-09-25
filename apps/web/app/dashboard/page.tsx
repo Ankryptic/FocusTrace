@@ -240,11 +240,15 @@ export default function DashboardPage() {
                       {activity.application}
                     </p>
 
-                    <p className="truncate text-sm text-zinc-500">
+                    {activity.windowTitle && (
+                      <p className="truncate text-sm text-zinc-400">
+                        {activity.windowTitle}
+                      </p>
+                    )}
+
+                    <p className="mt-1 truncate text-xs text-zinc-500">
                       {activity.classification
-                        ? formatCategory(
-                            activity.classification.category,
-                          )
+                        ? formatCategory(activity.classification.category)
                         : "Unclassified"}
                     </p>
                   </div>
