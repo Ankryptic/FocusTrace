@@ -6,6 +6,10 @@ using System.Net.Sockets;
 using System.Text;
 using System.Net.Http;
 
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
 namespace FocusTrace.Agent;
 
 public class Worker : BackgroundService
@@ -15,26 +19,73 @@ public class Worker : BackgroundService
 
     private readonly string _webAppUrl;
 
+    private CancellationTokenSource? _trackingCancellation;
+
+    private readonly object _stateLock = new();
+
+    public bool IsConnected { get; private set; }
+
+    public bool IsTrackingEnabled { get; private set; }
+
+    public string ConnectionMessage { get; private set; }
+        = "Not connected";
+
+    public event EventHandler<AgentStatusChangedEventArgs>? StatusChanged;
+
     public Worker(
-    ILogger<Worker> logger,
-    IConfiguration configuration)
+        ILogger<Worker> logger,
+        IConfiguration configuration)
     {
         _logger = logger;
 
         _webAppUrl =
-            configuration["_webAppUrl"]
+            configuration["WebAppUrl"]
             ?? "http://localhost:3000";
 
         _logger.LogInformation(
-    "FocusTrace server URL: {WebAppUrl}",
-    _webAppUrl
-);
+            "FocusTrace server URL: {WebAppUrl}",
+            _webAppUrl
+        );
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
+        _logger.LogInformation(
+            "FocusTrace Agent started."
+        );
 
-        _logger.LogInformation("FocusTrace Agent started.");
+        try
+        {
+            await Task.Delay(
+                Timeout.Infinite,
+                stoppingToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown.
+        }
+
+        _logger.LogInformation(
+            "FocusTrace Agent stopped."
+        );
+    }
+
+    public async Task ConnectAsync()
+    {
+        if (IsConnected)
+            return;
+
+        _logger.LogInformation(
+            "Connect requested."
+        );
+
+        UpdateStatus(
+            false,
+            false,
+            "Connecting..."
+        );
 
         var storedToken = CredentialStore.LoadToken();
 
@@ -44,7 +95,10 @@ public class Worker : BackgroundService
                 "Existing desktop credential found."
             );
 
-            var status = await ValidateStoredCredential(storedToken, stoppingToken);
+            var status = await ValidateStoredCredential(
+                storedToken,
+                CancellationToken.None
+            );
 
             if (status is not null)
             {
@@ -52,43 +106,63 @@ public class Worker : BackgroundService
                     "Desktop credential verified successfully."
                 );
 
-                _logger.LogInformation(
-                    "Tracking enabled: {TrackingEnabled}, inactivity timeout: {Timeout} minutes",
-                    status.TrackingEnabled,
-                    status.InactivityTimeoutMinutes
-                );
-
-                using var activityMonitor = new ActivityMonitor();
-
-                activityMonitor.Start();
-
-                _logger.LogInformation(
-                    "Activity monitoring started."
-                );
-
-                await RunActivityLoop(
-                    activityMonitor,
+                await StartTracking(
                     storedToken,
-                    status,
-                    stoppingToken
+                    status
                 );
 
                 return;
             }
 
-            _logger.LogError(
-                "Unable to verify the stored desktop credential."
+            _logger.LogWarning(
+                "Stored desktop credential is no longer valid."
             );
 
+            CredentialStore.DeleteToken();
+        }
+
+        await AuthorizeDesktopAsync();
+    }
+
+    public async Task DisconnectAsync()
+    {
+        if (!IsConnected)
             return;
-        }
-        else
+
+        _logger.LogInformation(
+            "Disconnect requested."
+        );
+
+        try
         {
-            _logger.LogInformation(
-                "No desktop credential found. Starting authorization."
-            );
+            _trackingCancellation?.Cancel();
+        }
+        catch
+        {
+            // Ignore cancellation errors.
         }
 
+        _trackingCancellation?.Dispose();
+        _trackingCancellation = null;
+
+        IsConnected = false;
+        IsTrackingEnabled = false;
+
+        UpdateStatus(
+            false,
+            false,
+            "Disconnected"
+        );
+
+        _logger.LogInformation(
+            "FocusTrace tracking disconnected."
+        );
+
+        await Task.CompletedTask;
+    }
+
+    private async Task AuthorizeDesktopAsync()
+    {
         var port = GetFreePort();
 
         _logger.LogInformation(
@@ -117,23 +191,35 @@ public class Worker : BackgroundService
 
         OpenBrowser(authorizeUrl);
 
+        UpdateStatus(
+            false,
+            false,
+            "Waiting for browser authorization..."
+        );
+
         try
         {
-            while (!stoppingToken.IsCancellationRequested)
+            while (true)
             {
-                var contextTask = listener.GetContextAsync();
+                var contextTask =
+                    listener.GetContextAsync();
 
-                var completedTask = await Task.WhenAny(
-                    contextTask,
-                    Task.Delay(Timeout.Infinite, stoppingToken)
-                );
+                var completedTask =
+                    await Task.WhenAny(
+                        contextTask,
+                        Task.Delay(
+                            Timeout.Infinite
+                        )
+                    );
 
                 if (completedTask != contextTask)
-                    break;
+                    return;
 
-                var context = await contextTask;
+                var context =
+                    await contextTask;
 
-                var code = context.Request.QueryString["code"];
+                var code =
+                    context.Request.QueryString["code"];
 
                 if (string.IsNullOrWhiteSpace(code))
                 {
@@ -151,13 +237,14 @@ public class Worker : BackgroundService
 
                 await SendResponse(
                     context,
-                    "FocusTrace Desktop authorization received. You can close this browser window."
+                    "FocusTrace authorization received. You can close this browser window."
                 );
 
-                // Exchange the one-time authorization code
-                // for a permanent desktop credential.
                 var exchangeResult =
-                    await ExchangeAuthorizationCode(code, stoppingToken);
+                    await ExchangeAuthorizationCode(
+                        code,
+                        CancellationToken.None
+                    );
 
                 if (!exchangeResult.Success)
                 {
@@ -166,79 +253,180 @@ public class Worker : BackgroundService
                         exchangeResult.Error
                     );
 
-                    break;
-                }
-
-                _logger.LogInformation(
-                    "Desktop device authorized successfully. Device ID: {DeviceId}",
-                    exchangeResult.DeviceId
-                );
-
-                // We will securely persist this token in the next step.
-                if (!string.IsNullOrWhiteSpace(exchangeResult.Token))
-                {
-                    CredentialStore.SaveToken(exchangeResult.Token);
-
-                    _logger.LogInformation(
-                        "Desktop credential securely stored."
-                    );
-
-                    var status = await ValidateStoredCredential(
-                        exchangeResult.Token,
-                        stoppingToken
-                    );
-
-                    if (status is null)
-                    {
-                        _logger.LogError(
-                            "Newly authorized desktop credential could not be verified."
-                        );
-
-                        CredentialStore.DeleteToken();
-                        break;
-                    }
-
-                    _logger.LogInformation(
-                        "Desktop credential verified successfully."
-                    );
-
-                    _logger.LogInformation(
-                        "Tracking enabled: {TrackingEnabled}, inactivity timeout: {Timeout} minutes",
-                        status.TrackingEnabled,
-                        status.InactivityTimeoutMinutes
-                    );
-
-                    using var activityMonitor = new ActivityMonitor();
-
-                    activityMonitor.Start();
-
-                    _logger.LogInformation(
-                        "Activity monitoring started."
-                    );
-
-                    await RunActivityLoop(
-                        activityMonitor,
-                        exchangeResult.Token,
-                        status,
-                        stoppingToken
+                    UpdateStatus(
+                        false,
+                        false,
+                        "Authorization failed"
                     );
 
                     return;
                 }
 
-                break;
+                if (string.IsNullOrWhiteSpace(
+                        exchangeResult.Token))
+                {
+                    UpdateStatus(
+                        false,
+                        false,
+                        "Authorization failed"
+                    );
+
+                    return;
+                }
+
+                CredentialStore.SaveToken(
+                    exchangeResult.Token
+                );
+
+                _logger.LogInformation(
+                    "Desktop credential securely stored."
+                );
+
+                var status =
+                    await ValidateStoredCredential(
+                        exchangeResult.Token,
+                        CancellationToken.None
+                    );
+
+                if (status is null)
+                {
+                    _logger.LogError(
+                        "Newly authorized desktop credential could not be verified."
+                    );
+
+                    CredentialStore.DeleteToken();
+
+                    UpdateStatus(
+                        false,
+                        false,
+                        "Unable to verify connection"
+                    );
+
+                    return;
+                }
+
+                await StartTracking(
+                    exchangeResult.Token,
+                    status
+                );
+
+                return;
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // Normal shutdown.
         }
         finally
         {
             listener.Stop();
         }
+    }
 
-        _logger.LogInformation("FocusTrace Agent stopped.");
+    private async Task StartTracking(
+        string token,
+        StatusResponse status)
+    {
+        _trackingCancellation?.Cancel();
+        _trackingCancellation?.Dispose();
+
+        _trackingCancellation =
+            new CancellationTokenSource();
+
+        IsConnected = true;
+        IsTrackingEnabled =
+            status.TrackingEnabled;
+
+        var message =
+            status.TrackingEnabled
+                ? "Connected"
+                : "Connected — tracking disabled by HR";
+
+        UpdateStatus(
+            true,
+            status.TrackingEnabled,
+            message
+        );
+
+        _logger.LogInformation(
+            "Tracking enabled: {TrackingEnabled}, inactivity timeout: {Timeout} minutes",
+            status.TrackingEnabled,
+            status.InactivityTimeoutMinutes
+        );
+
+        _ = RunTrackingSafely(
+            token,
+            status,
+            _trackingCancellation.Token
+        );
+
+        await Task.CompletedTask;
+    }
+
+    private async Task RunTrackingSafely(
+        string token,
+        StatusResponse status,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var activityMonitor =
+                new ActivityMonitor();
+
+            activityMonitor.Start();
+
+            _logger.LogInformation(
+                "Activity monitoring started."
+            );
+
+            await RunActivityLoop(
+                activityMonitor,
+                token,
+                status,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Tracking stopped."
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Tracking loop stopped unexpectedly."
+            );
+
+            IsConnected = false;
+            IsTrackingEnabled = false;
+
+            UpdateStatus(
+                false,
+                false,
+                "Tracking stopped unexpectedly"
+            );
+        }
+    }
+
+    private void UpdateStatus(
+        bool connected,
+        bool trackingEnabled,
+        string message)
+    {
+        lock (_stateLock)
+        {
+            IsConnected = connected;
+            IsTrackingEnabled = trackingEnabled;
+            ConnectionMessage = message;
+        }
+
+        StatusChanged?.Invoke(
+            this,
+            new AgentStatusChangedEventArgs(
+                connected,
+                trackingEnabled,
+                message
+            )
+        );
     }
 
     private async Task<StatusResponse?> ValidateStoredCredential(
@@ -492,6 +680,16 @@ public class Worker : BackgroundService
                     if (latestStatus.TrackingEnabled != trackingEnabled)
                     {
                         trackingEnabled = latestStatus.TrackingEnabled;
+
+                        IsTrackingEnabled = trackingEnabled;
+
+                        UpdateStatus(
+                            true,
+                            trackingEnabled,
+                            trackingEnabled
+                                ? "Connected"
+                                : "Connected — tracking disabled by HR"
+                        );
 
                         _logger.LogInformation(
                             "Tracking setting changed by HR: {TrackingEnabled}",
@@ -1155,5 +1353,24 @@ public class Worker : BackgroundService
         _logger.LogInformation(
             "FocusTrace Agent stopped."
         );
+    }
+
+    public sealed class AgentStatusChangedEventArgs : EventArgs
+    {
+        public bool IsConnected { get; }
+
+        public bool IsTrackingEnabled { get; }
+
+        public string Message { get; }
+
+        public AgentStatusChangedEventArgs(
+            bool isConnected,
+            bool isTrackingEnabled,
+            string message)
+        {
+            IsConnected = isConnected;
+            IsTrackingEnabled = isTrackingEnabled;
+            Message = message;
+        }
     }
 }

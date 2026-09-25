@@ -1,40 +1,13 @@
 import { db } from "@focus-trace/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+
 import { authOptions } from "@/auth";
-import { fromZonedTime } from "date-fns-tz";
+import { generateDailyTimesheet } from "@/lib/timesheet";
 
-function getUserDayRange(
-    dateParam: string,
-    timezone: string,
-) {
-    const startOfDay = fromZonedTime(
-        `${dateParam}T00:00:00`,
-        timezone,
-    );
-
-    const endOfDay = fromZonedTime(
-        `${dateParam}T23:59:59.999`,
-        timezone,
-    );
-
-    return {
-        startOfDay,
-        endOfDay,
-    };
-}
-
-function validateDate(dateParam: string | null) {
-    return Boolean(
-        dateParam &&
-        /^\d{4}-\d{2}-\d{2}$/.test(dateParam),
-    );
-}
-
-export async function GET(req: Request) {
+export async function POST(request: Request) {
     try {
-        const session =
-            await getServerSession(authOptions);
+        const session = await getServerSession(authOptions);
 
         if (!session?.user?.id) {
             return NextResponse.json(
@@ -46,64 +19,119 @@ export async function GET(req: Request) {
             );
         }
 
-        const userId = session.user.id;
+        const body = await request.json();
 
-        const { searchParams } = new URL(req.url);
+        const date = body.date;
+        const timezone =
+            body.timezone || "Asia/Kolkata";
 
-        const dateParam =
-            searchParams.get("date");
-
-        if (!validateDate(dateParam)) {
+        if (!date) {
             return NextResponse.json(
                 {
                     success: false,
-                    error:
-                        "Invalid or missing date. Use YYYY-MM-DD.",
+                    error: "date is required",
                 },
                 { status: 400 },
             );
         }
+
+        const userId = session.user.id;
+
+        const user = await db.user.findUnique({
+            where: {
+                id: userId,
+            },
+            select: {
+                id: true,
+                role: true,
+                privacySettings: {
+                    select: {
+                        inactivityTimeoutMinutes: true,
+                    },
+                },
+            },
+        });
+
+        if (!user) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "User not found",
+                },
+                { status: 404 },
+            );
+        }
+
+        const timesheet =
+            await generateDailyTimesheet({
+                userId: user.id,
+                date,
+                timezone,
+                inactivityTimeoutMinutes:
+                    user.privacySettings
+                        ?.inactivityTimeoutMinutes ?? 30,
+            });
+
+        return NextResponse.json({
+            success: true,
+            timesheet,
+        });
+    } catch (error) {
+        console.error(
+            "Timesheet generation error:",
+            error,
+        );
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Failed to generate timesheet",
+            },
+            { status: 500 },
+        );
+    }
+}
+
+export async function GET(request: Request) {
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const { searchParams } = new URL(request.url);
+
+        const date =
+            searchParams.get("date");
 
         const timezone =
             searchParams.get("timezone") ||
             "Asia/Kolkata";
 
-        const {
-            startOfDay,
-            endOfDay,
-        } = getUserDayRange(
-            dateParam!,
-            timezone,
-        );
-
-        if (
-            Number.isNaN(startOfDay.getTime()) ||
-            Number.isNaN(endOfDay.getTime())
-        ) {
+        if (!date) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Invalid Date",
+                    error: "date is required",
                 },
                 { status: 400 },
             );
         }
 
+        const userId = session.user.id;
+
         const timesheet =
-            await db.timesheet.findUnique({
-                where: {
-                    userId_date: {
-                        userId,
-                        date: startOfDay,
-                    },
-                },
-                include: {
-                    entries: {
-                        orderBy: {
-                            startTime: "asc",
-                        },
-                    },
-                },
+            await generateDailyTimesheet({
+                userId,
+                date,
+                timezone,
             });
 
         if (!timesheet) {
@@ -124,35 +152,16 @@ export async function GET(req: Request) {
         });
     } catch (error) {
         console.error(
-            "Get timesheet error:",
+            "Timesheet fetch error:",
             error,
         );
 
         return NextResponse.json(
             {
                 success: false,
-                error:
-                    "Could not fetch timesheet.",
+                error: "Failed to load timesheet",
             },
             { status: 500 },
         );
     }
-}
-
-/**
- * Timesheets are generated automatically from
- * ActivityEvent data.
- *
- * Manual generation is intentionally not supported
- * through this employee endpoint.
- */
-export async function POST() {
-    return NextResponse.json(
-        {
-            success: false,
-            error:
-                "Timesheets are generated automatically from tracked activity.",
-        },
-        { status: 405 },
-    );
 }

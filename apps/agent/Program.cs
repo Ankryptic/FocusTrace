@@ -1,14 +1,32 @@
 using FocusTrace.Agent;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Windows;
 
-var builder = Host.CreateApplicationBuilder(args);
+namespace FocusTrace.Agent;
 
-builder.Services.AddWindowsService(options =>
+public partial class Program
 {
-    options.ServiceName = "FocusTrace Agent";
-});
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddHostedService<Worker>();
+        builder.Services.AddSingleton<Worker>();
 
-var host = builder.Build();
+        using var host = builder.Build();
 
-host.Run();
+        host.Start();
+
+        var worker = host.Services.GetRequiredService<Worker>();
+
+        var application = new System.Windows.Application();
+
+        var window = new MainWindow(worker);
+
+        application.Run(window);
+
+        host.StopAsync().GetAwaiter().GetResult();
+    }
+}

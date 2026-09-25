@@ -25,8 +25,6 @@ export const authOptions = {
         session.user.role = user.role;
       }
 
-      console.log("SESSION ROLE:", session.user.role);
-
       return session;
     }
   },
