@@ -433,7 +433,7 @@ export default function HRDashboard() {
     }
 
     return (
-        <main className="min-h-screen bg-gray-50 p-8">
+        <main className="min-h-screen bg-zinc-950 p-8">
             <div className="mx-auto max-w-7xl ">
                 <header className="w-full flex items-center justify-between">
                     <div>
@@ -449,9 +449,9 @@ export default function HRDashboard() {
                     <SignOutButton />
                 </header>
 
-                <div className="mt-8 grid gap-6 lg:grid-cols-3">
+                <div className="mt-8 grid gap-6 lg:grid-cols-3 ">
                     {/* Employees */}
-                    <section className="rounded-xl bg-white p-6 shadow">
+                    <section className="rounded-xl bg-zinc-900 p-6 shadow border border-gray-400">
                         <h2 className="text-xl font-semibold">
                             Employees
                         </h2>
@@ -475,8 +475,8 @@ export default function HRDashboard() {
                                             }
                                             className={`w-full rounded-lg border p-4 text-left transition ${selectedEmployee?.id ===
                                                 employee.id
-                                                ? "border-black bg-gray-100"
-                                                : "hover:bg-gray-50"
+                                                ? "border-black bg-zinc-700"
+                                                : "hover:bg-zinc-700"
                                                 }`}
                                         >
                                             <div className="font-medium">
@@ -484,7 +484,7 @@ export default function HRDashboard() {
                                                     "Unnamed employee"}
                                             </div>
 
-                                            <div className="text-sm text-gray-500">
+                                            <div className="text-sm text-white">
                                                 {
                                                     employee.email
                                                 }
@@ -516,7 +516,7 @@ export default function HRDashboard() {
                     </section>
 
                     {/* Employee settings */}
-                    <section className="rounded-xl bg-white p-6 shadow">
+                    <section className="rounded-xl bg-zinc-900 border border-gray-400 p-6 shadow">
                         <h2 className="text-xl font-semibold">
                             Employee Settings
                         </h2>
@@ -534,7 +534,7 @@ export default function HRDashboard() {
                                         }
                                     </p>
 
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-white">
                                         {
                                             selectedEmployee.email
                                         }
@@ -649,7 +649,7 @@ export default function HRDashboard() {
                     </section>
 
                     {/* Activity summary */}
-                    <section className="rounded-xl bg-white p-6 shadow">
+                    <section className="rounded-xl bg-zinc-900 border border-gray-400 p-6 shadow">
                         <h2 className="text-xl font-semibold">
                             Activity
                         </h2>
@@ -676,12 +676,12 @@ export default function HRDashboard() {
                                                 .value,
                                         )
                                     }
-                                    className="mt-2 w-full rounded-lg border px-3 py-2"
+                                    className="mt-2 w-full rounded-lg border px-3 py-2 cursor-pointer"
                                 />
 
                                 <div className="mt-6 grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg bg-gray-50 p-4">
-                                        <p className="text-sm text-gray-500">
+                                    <div className="rounded-lg bg-zinc-700 p-4">
+                                        <p className="text-sm text-gray-400">
                                             Events
                                         </p>
 
@@ -692,8 +692,8 @@ export default function HRDashboard() {
                                         </p>
                                     </div>
 
-                                    <div className="rounded-lg bg-gray-50 p-4">
-                                        <p className="text-sm text-gray-500">
+                                    <div className="rounded-lg bg-zinc-700 p-4">
+                                        <p className="text-sm text-gray-400">
                                             Screenshots
                                         </p>
 
@@ -709,7 +709,7 @@ export default function HRDashboard() {
                     </section>
 
                     {/* Timesheet */}
-                    <section className="mt-6 rounded-xl bg-white p-6 shadow">
+                    <section className="mt-6 rounded-xl bg-zinc-900 border border-gray-400 p-6 shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h2 className="text-xl font-semibold">
@@ -723,7 +723,7 @@ export default function HRDashboard() {
                             </div>
 
                             {timesheetData.entries.length > 0 && (
-                                <div className="rounded-lg bg-gray-100 px-4 py-2 text-sm">
+                                <div className="rounded-lg bg-zinc-700 px-4 py-2 text-sm">
                                     {timesheetData.entries.length} active
                                     periods
                                 </div>
@@ -804,17 +804,17 @@ export default function HRDashboard() {
 
                                                 <div className="flex flex-col items-start gap-2 sm:items-end">
                                                     <div className="flex items-center gap-3">
-                                                        <span className="rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                                                        <span className="rounded-md bg-zinc-700 px-3 py-1 text-xs text-white">
                                                             {entry.category}
                                                         </span>
 
-                                                        <span className="rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                                                        <span className="rounded-md bg-zinc-700 px-3 py-1 text-xs text-white">
                                                             Automatic
                                                         </span>
                                                     </div>
 
                                                     {entry.description && (
-                                                        <p className="text-sm text-gray-600">
+                                                        <p className="text-sm text-white">
                                                             {entry.description}
                                                         </p>
                                                     )}
@@ -830,7 +830,7 @@ export default function HRDashboard() {
 
                 {/* Activity timeline */}
                 {selectedEmployee && (
-                    <section className="mt-6 rounded-xl bg-white p-6 shadow">
+                    <section className="mt-6 rounded-xl bg-zinc-900 border border-gray-400 p-6 shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h2 className="text-xl font-semibold">
@@ -856,7 +856,7 @@ export default function HRDashboard() {
                                 disabled={
                                     activityLoading
                                 }
-                                className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                                className="rounded-lg border px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50"
                             >
                                 {activityLoading
                                     ? "Refreshing..."
@@ -893,7 +893,7 @@ export default function HRDashboard() {
                                                     <div className="absolute left-[15px] top-8 h-full w-px bg-gray-200" />
                                                 )}
 
-                                            <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm">
+                                            <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-sm">
                                                 {getEventIcon(
                                                     event.type,
                                                 )}
@@ -907,14 +907,14 @@ export default function HRDashboard() {
                                                         )}
                                                     </p>
 
-                                                    <time className="text-sm text-gray-500">
+                                                    <time className="text-sm text-white">
                                                         {formatTime(
                                                             event.timestamp,
                                                         )}
                                                     </time>
                                                 </div>
 
-                                                <p className="mt-1 text-sm text-gray-500">
+                                                <p className="mt-1 text-sm text-white">
                                                     {getEventDescription(
                                                         event,
                                                     )}
@@ -930,7 +930,7 @@ export default function HRDashboard() {
 
                 {/* Screenshots */}
                 {selectedEmployee && (
-                    <section className="mt-6 rounded-xl bg-white p-6 shadow">
+                    <section className="mt-6 rounded-xl bg-zinc-900 border border-gray-400 p-6 shadow">
                         <h2 className="text-xl font-semibold">
                             Screenshot Activity
                         </h2>
@@ -949,7 +949,7 @@ export default function HRDashboard() {
                                     return (
                                         <div
                                             key={screenshot.id}
-                                            className="overflow-hidden rounded-lg border bg-white"
+                                            className="overflow-hidden rounded-lg border bg-zinc-700"
                                         >
                                             {imageUrl ? (
                                                 <button
@@ -970,7 +970,7 @@ export default function HRDashboard() {
                                                     type="button"
                                                     onClick={() => loadScreenshotUrl(screenshot.id)}
                                                     disabled={loadingScreenshot === screenshot.id}
-                                                    className="flex aspect-video w-full items-center justify-center bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-50"
+                                                    className="flex aspect-video w-full items-center justify-center bg-zinc-500 text-black hover:bg-gray-200 disabled:opacity-50"
                                                 >
                                                     {loadingScreenshot === screenshot.id
                                                         ? "Loading..."
@@ -985,12 +985,12 @@ export default function HRDashboard() {
                                                 </p>
 
                                                 {screenshot.website && (
-                                                    <p className="text-sm text-gray-500">
+                                                    <p className="text-sm text-white">
                                                         {screenshot.website}
                                                     </p>
                                                 )}
 
-                                                <p className="mt-2 text-xs text-gray-400">
+                                                <p className="mt-2 text-xs text-white">
                                                     {formatTime(screenshot.capturedAt)}
                                                 </p>
                                             </div>
